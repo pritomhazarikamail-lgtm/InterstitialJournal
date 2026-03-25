@@ -125,6 +125,53 @@
             margin-bottom: 20px;
             padding: 10px 0;
         }
+
+        /* Heatmap Styles */
+        .heatmap-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 30px;
+            overflow-x: auto;
+            padding-bottom: 10px;
+        }
+        .heatmap-grid {
+            display: grid;
+            grid-template-flow: column;
+            grid-template-columns: repeat(22, 1fr); /* Shows roughly 5 months */
+            grid-template-rows: repeat(7, 1fr);
+            gap: 3px;
+            width: max-content;
+        }
+        .heatmap-cell {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            background-color: #ebedf0;
+        }
+        /* Color scale based on intensity */
+        .lvl-0 { background-color: #ebedf0; }
+        .lvl-1 { background-color: #9be9a8; }
+        .lvl-2 { background-color: #40c463; }
+        .lvl-3 { background-color: #30a14e; }
+        .lvl-4 { background-color: #216e39; }
+
+        /* Edit/Delete Buttons */
+        .note-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 15px;
+        }
+        .action-btn {
+            font-size: 0.8rem;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+            font-weight: 500;
+        }
+        .edit-btn { color: var(--accent); }
+        .delete-btn { color: #ff3b30; }
     </style>
 </head>
 <body>
@@ -134,20 +181,12 @@
         <h1>New Journal Entry</h1>
         <textarea id="note-input" placeholder="What are you working on? What's on your mind?"></textarea>
         <div class="controls">
-            <a class="link-btn" onclick="showPage('history-page'); renderCalendar();">View History</a>
+            <a class="link-btn" onclick="showPage('history-page')">View History</a>
             <button onclick="saveNote()">Save Note</button>
         </div>
     </div>
 
     <div id="history-page" class="hidden">
-        <div id="tag-cloud"></div> <div class="search-container">
-            </div>
-        </div>
-        <div class="search-container" style="margin-bottom: 20px;">
-            <input type="text" id="search-input" placeholder="Search notes..." 
-                   oninput="searchNotes()" 
-                   style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border);">
-        </div>
         <div class="calendar-header">
             <a class="link-btn" onclick="showPage('home-page')">← Back</a>
             <h2 id="month-display"></h2>
@@ -156,21 +195,31 @@
                 <button onclick="changeMonth(1)">›</button>
             </div>
         </div>
+
+        <div id="tag-cloud"></div> 
+        
+        <div class="search-container" style="margin-bottom: 20px;">
+            <input type="text" id="search-input" placeholder="Search notes..." 
+                   oninput="searchNotes()" 
+                   style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); box-sizing: border-box;">
+        </div>
+
         <div id="calendar" class="calendar-grid"></div>
 
         <div id="day-notes" style="margin-top: 30px;">
             <h3 id="selected-date-title"></h3>
             <div id="notes-list"></div>
         </div>
+
         <hr style="margin: 40px 0 20px 0; border: 0; border-top: 1px solid var(--border);">
-            <div class="storage-controls" style="display: flex; gap: 10px; align-items: center;">
-                <button onclick="exportNotes()" style="background-color: #34c759;">Export JSON</button>
-                
-                <label for="import-file" class="link-btn" style="border: 1px solid var(--accent); padding: 8px 15px; border-radius: 8px;">
-                    Import JSON
-                </label>
-                <input type="file" id="import-file" accept=".json" style="display: none;" onchange="importNotes(event)">
-            </div>
+        <div class="storage-controls" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <button onclick="exportNotes()" style="background-color: #34c759;">Export JSON</button>
+            
+            <label for="import-file" class="link-btn" style="border: 1px solid var(--accent); padding: 8px 15px; border-radius: 8px;">
+                Import JSON
+            </label>
+            <input type="file" id="import-file" accept=".json" style="display: none;" onchange="importNotes(event)">
+        </div>
     </div>
 </div>
 
@@ -178,8 +227,6 @@
     let currentMonth = new Date();
     const noteInput = document.getElementById('note-input');
 
-   
-    // Update showPage to refresh tags when history is opened
     function showPage(pageId) {
         document.getElementById('home-page').classList.add('hidden');
         document.getElementById('history-page').classList.add('hidden');
@@ -187,16 +234,18 @@
         if (pageId === 'history-page') {
             renderTagCloud();
             renderCalendar();
+            // Reset view if coming back from a search/tag filter
+            document.getElementById('calendar').style.display = 'grid';
+            document.getElementById('notes-list').innerHTML = '';
+            document.getElementById('selected-date-title').innerText = '';
+            document.getElementById('search-input').value = '';
         }
     }
-
-    // --- LOGIC ---
 
     function saveNote() {
         const text = noteInput.value.trim();
         if (!text) return;
 
-        // Regex to find all #tags
         const tagRegex = /#(\w+)/g;
         const tags = (text.match(tagRegex) || []).map(t => t.toLowerCase());
 
@@ -206,7 +255,7 @@
             timestamp: now.toISOString(),
             content: text,
             dateKey: now.toISOString().split('T')[0],
-            tags: tags // Store tags array
+            tags: tags
         };
 
         const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
@@ -214,7 +263,7 @@
         localStorage.setItem('journal_notes', JSON.stringify(notes));
 
         noteInput.value = '';
-        alert('Note saved with tags: ' + (tags.join(', ') || 'none'));
+        alert('Note saved!');
     }
 
     function renderCalendar() {
@@ -232,7 +281,6 @@
         const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
         const datesWithNotes = new Set(notes.map(n => n.dateKey));
 
-        // Padding for first day
         for (let i = 0; i < firstDay; i++) {
             calendarEl.appendChild(document.createElement('div'));
         }
@@ -262,11 +310,17 @@
             .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
         title.innerText = `Notes for ${dateKey}`;
+        
+        // This is the "UI Template" part
         notesList.innerHTML = filtered.length 
             ? filtered.map(n => `
-                <div class="note-item">
+                <div class="note-item" id="note-${n.id}">
                     <div class="note-time">${new Date(n.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                     <div class="note-content">${n.content.replace(/\n/g, '<br>')}</div>
+                    <div class="note-actions">
+                        <button class="action-btn edit-btn" onclick="editNote(${n.id})">Edit</button>
+                        <button class="action-btn delete-btn" onclick="deleteNote(${n.id})">Delete</button>
+                    </div>
                 </div>
             `).join('')
             : '<p>No notes for this day.</p>';
@@ -278,120 +332,155 @@
     }
 
     function exportNotes() {
-    const notes = localStorage.getItem('journal_notes');
-    if (!notes || notes === '[]') {
-        alert("No notes to export!");
-        return;
+        const notes = localStorage.getItem('journal_notes');
+        if (!notes || notes === '[]') return alert("No notes to export!");
+        const blob = new Blob([notes], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `journal-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
     }
 
-    const blob = new Blob([notes], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    
-    const timestamp = new Date().toISOString().split('T')[0];
-    a.href = url;
-    a.download = `journal-export-${timestamp}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
+    function importNotes(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+                const existing = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+                const existingIds = new Set(existing.map(n => n.id));
+                const merged = [...existing, ...imported.filter(n => !existingIds.has(n.id))];
+                localStorage.setItem('journal_notes', JSON.stringify(merged));
+                alert('Imported successfully!');
+                renderCalendar();
+                renderTagCloud();
+            } catch (err) { alert("Error importing file."); }
+        };
+        reader.readAsText(file);
+    }
 
-function importNotes(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+    function searchNotes() {
+        const query = document.getElementById('search-input').value.toLowerCase();
+        const notesList = document.getElementById('notes-list');
+        const calendarEl = document.getElementById('calendar');
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
 
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            const importedData = JSON.parse(e.target.result);
-            
-            if (!Array.isArray(importedData)) {
-                throw new Error("Invalid format: Expected an array of notes.");
-            }
-
-            // Optional: Merge with existing notes instead of overwriting
-            const existingNotes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-            
-            // Deduplicate by ID (prevents double imports)
-            const existingIds = new Set(existingNotes.map(n => n.id));
-            const newNotes = importedData.filter(n => !existingIds.has(n.id));
-            
-            const mergedNotes = [...existingNotes, ...newNotes];
-            localStorage.setItem('journal_notes', JSON.stringify(mergedNotes));
-
-            alert(`Successfully imported ${newNotes.length} new notes!`);
-            renderCalendar(); // Refresh the view
-        } catch (err) {
-            alert("Error importing file: " + err.message);
+        if (query.length === 0) {
+            calendarEl.style.display = 'grid';
+            notesList.innerHTML = '';
+            document.getElementById('selected-date-title').innerText = '';
+            return;
         }
-    };
-    reader.readAsText(file);
-}
-function searchNotes() {
-    const query = document.getElementById('search-input').value.toLowerCase();
-    const notesList = document.getElementById('notes-list');
-    const calendarEl = document.getElementById('calendar');
-    const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
 
-    // If search is empty, show the calendar and clear results
-    if (query.length === 0) {
-        calendarEl.style.display = 'grid';
-        notesList.innerHTML = '';
-        document.getElementById('selected-date-title').innerText = '';
-        return;
+        calendarEl.style.display = 'none';
+        document.getElementById('selected-date-title').innerText = `Search results for: "${query}"`;
+
+        const filtered = notes.filter(n => n.content.toLowerCase().includes(query))
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        // Notice we use the same "Template" here so the UI stays consistent
+        notesList.innerHTML = filtered.length 
+            ? filtered.map(n => `
+                <div class="note-item" id="note-${n.id}">
+                    <div class="note-time">${n.dateKey} — ${new Date(n.timestamp).toLocaleTimeString()}</div>
+                    <div class="note-content">${n.content.replace(new RegExp(query, 'gi'), (match) => `<mark>${match}</mark>`)}</div>
+                    <div class="note-actions">
+                        <button class="action-btn edit-btn" onclick="editNote(${n.id})">Edit</button>
+                        <button class="action-btn delete-btn" onclick="deleteNote(${n.id})">Delete</button>
+                    </div>
+                </div>
+            `).join('')
+            : '<p>No matching notes found.</p>';
     }
 
-    // Hide calendar during search for a "Search Results" view
-    calendarEl.style.display = 'none';
-    document.getElementById('selected-date-title').innerText = `Search results for: "${query}"`;
+    function renderTagCloud() {
+        const cloud = document.getElementById('tag-cloud');
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        const uniqueTags = [...new Set(notes.flatMap(n => n.tags || []))];
+        cloud.innerHTML = uniqueTags.map(tag => `<span class="tag" onclick="filterByTag('${tag}')">${tag}</span>`).join('');
+    }
 
-    const filtered = notes.filter(n => 
-        n.content.toLowerCase().includes(query)
-    ).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Newest first
-
-    notesList.innerHTML = filtered.length 
-        ? filtered.map(n => `
+    function filterByTag(tag) {
+        const notesList = document.getElementById('notes-list');
+        const calendarEl = document.getElementById('calendar');
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        calendarEl.style.display = 'none';
+        document.getElementById('selected-date-title').innerText = `Tagged: ${tag}`;
+        const filtered = notes.filter(n => n.tags && n.tags.includes(tag))
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        notesList.innerHTML = filtered.map(n => `
             <div class="note-item">
-                <div class="note-time">${n.dateKey} — ${new Date(n.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                <div class="note-content">${n.content.replace(new RegExp(query, 'gi'), (match) => `<mark>${match}</mark>`)}</div>
+                <div class="note-time">${n.dateKey}</div>
+                <div class="note-content">${n.content}</div>
             </div>
-        `).join('')
-        : '<p>No matching notes found.</p>';
-}
-function renderTagCloud() {
-    const cloud = document.getElementById('tag-cloud');
+        `).join('');
+    }
+
+    function renderHeatmap() {
+    const container = document.getElementById('heatmap-grid');
+    container.innerHTML = '';
     const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
     
-    // Flatten all tags and get unique values
-    const allTags = notes.flatMap(n => n.tags || []);
-    const uniqueTags = [...new Set(allTags)];
+    // 1. Aggregate counts by date
+    const counts = notes.reduce((acc, note) => {
+        acc[note.dateKey] = (acc[note.dateKey] || 0) + 1;
+        return acc;
+    }, {});
 
-    cloud.innerHTML = uniqueTags.map(tag => 
-        `<span class="tag" onclick="filterByTag('${tag}')">${tag}</span>`
-    ).join('');
-}
-function filterByTag(tag) {
-    const notesList = document.getElementById('notes-list');
-    const calendarEl = document.getElementById('calendar');
-    const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+    // 2. Generate last 154 days (22 weeks)
+    const today = new Date();
+    for (let i = 153; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(today.getDate() - i);
+        const key = d.toISOString().split('T')[0];
+        const count = counts[key] || 0;
+        
+        // 3. Map count to level 0-4
+        let lvl = 0;
+        if (count > 0) lvl = Math.min(Math.ceil(count / 2), 4); 
 
-    calendarEl.style.display = 'none';
-    document.getElementById('selected-date-title').innerText = `Notes tagged with: ${tag}`;
+        const cell = document.createElement('div');
+        cell.className = `heatmap-cell lvl-${lvl}`;
+        cell.title = `${key}: ${count} notes`;
+        cell.onclick = () => showNotesForDay(key);
+        container.appendChild(cell);
+    }
+    }
+    function deleteNote(id) {
+        if (!confirm("Are you sure you want to delete this note?")) return;
+        
+        let notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        notes = notes.filter(n => n.id !== id);
+        localStorage.setItem('journal_notes', JSON.stringify(notes));
+        
+        // Refresh current view
+        const query = document.getElementById('search-input').value;
+        query ? searchNotes() : renderCalendar(); 
+        renderTagCloud();
+        renderHeatmap();
+    }
 
-    const filtered = notes.filter(n => 
-        n.tags && n.tags.includes(tag)
-    ).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-    notesList.innerHTML = filtered.map(n => `
-        <div class="note-item">
-            <div class="note-time">${n.dateKey} — ${new Date(n.timestamp).toLocaleTimeString()}</div>
-            <div class="note-content">${n.content}</div>
-        </div>
-    `).join('');
-}
-
+    function editNote(id) {
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        const noteIndex = notes.findIndex(n => n.id === id);
+        const newContent = prompt("Edit your note:", notes[noteIndex].content);
+        
+        if (newContent !== null && newContent.trim() !== "") {
+            notes[noteIndex].content = newContent.trim();
+            // Update tags in case they were changed
+            const tagRegex = /#(\w+)/g;
+            notes[noteIndex].tags = (newContent.match(tagRegex) || []).map(t => t.toLowerCase());
+            
+            localStorage.setItem('journal_notes', JSON.stringify(notes));
+            
+            // Refresh UI
+            const query = document.getElementById('search-input').value;
+            query ? searchNotes() : renderCalendar();
+            renderTagCloud();
+        }
+    }
 </script>
-
 </body>
 </html>
