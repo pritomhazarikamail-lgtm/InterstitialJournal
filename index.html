@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interstitial Journal</title>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --text: #1a1a1a;
+            --accent: #007aff;
+            --secondary: #f2f2f7;
+            --border: #e5e5ea;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            padding: 40px 20px;
+        }
+
+        h1 { font-weight: 700; font-size: 1.5rem; margin-bottom: 2rem; }
+        .hidden { display: none; }
+
+        /* Home Page Styles */
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 15px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            font-size: 1rem;
+            resize: none;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        textarea:focus { border-color: var(--accent); }
+
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        button {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .link-btn {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        /* Calendar Styles */
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+            text-align: center;
+        }
+
+        .calendar-day {
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .calendar-day:hover { background-color: var(--secondary); }
+        .has-note { font-weight: bold; color: var(--accent); text-decoration: underline; }
+        .today { background-color: var(--secondary); border: 1px solid var(--accent); }
+
+        /* Notes History */
+        .note-item {
+            padding: 15px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .note-time {
+            font-size: 0.8rem;
+            color: #8e8e93;
+            margin-bottom: 5px;
+        }
+        .tag {
+            display: inline-block;
+            background-color: var(--secondary);
+            color: var(--accent);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-right: 5px;
+            cursor: pointer;
+        }
+        .tag:hover { background-color: var(--border); }
+
+        #tag-cloud {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 20px;
+            padding: 10px 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="home-page">
+        <h1>New Journal Entry</h1>
+        <textarea id="note-input" placeholder="What are you working on? What's on your mind?"></textarea>
+        <div class="controls">
+            <a class="link-btn" onclick="showPage('history-page'); renderCalendar();">View History</a>
+            <button onclick="saveNote()">Save Note</button>
+        </div>
+    </div>
+
+    <div id="history-page" class="hidden">
+        <div id="tag-cloud"></div> <div class="search-container">
+            </div>
+        </div>
+        <div class="search-container" style="margin-bottom: 20px;">
+            <input type="text" id="search-input" placeholder="Search notes..." 
+                   oninput="searchNotes()" 
+                   style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border);">
+        </div>
+        <div class="calendar-header">
+            <a class="link-btn" onclick="showPage('home-page')">← Back</a>
+            <h2 id="month-display"></h2>
+            <div>
+                <button onclick="changeMonth(-1)">‹</button>
+                <button onclick="changeMonth(1)">›</button>
+            </div>
+        </div>
+        <div id="calendar" class="calendar-grid"></div>
+
+        <div id="day-notes" style="margin-top: 30px;">
+            <h3 id="selected-date-title"></h3>
+            <div id="notes-list"></div>
+        </div>
+        <hr style="margin: 40px 0 20px 0; border: 0; border-top: 1px solid var(--border);">
+            <div class="storage-controls" style="display: flex; gap: 10px; align-items: center;">
+                <button onclick="exportNotes()" style="background-color: #34c759;">Export JSON</button>
+                
+                <label for="import-file" class="link-btn" style="border: 1px solid var(--accent); padding: 8px 15px; border-radius: 8px;">
+                    Import JSON
+                </label>
+                <input type="file" id="import-file" accept=".json" style="display: none;" onchange="importNotes(event)">
+            </div>
+    </div>
+</div>
+
+<script>
+    let currentMonth = new Date();
+    const noteInput = document.getElementById('note-input');
+
+   
+    // Update showPage to refresh tags when history is opened
+    function showPage(pageId) {
+        document.getElementById('home-page').classList.add('hidden');
+        document.getElementById('history-page').classList.add('hidden');
+        document.getElementById(pageId).classList.remove('hidden');
+        if (pageId === 'history-page') {
+            renderTagCloud();
+            renderCalendar();
+        }
+    }
+
+    // --- LOGIC ---
+
+    function saveNote() {
+        const text = noteInput.value.trim();
+        if (!text) return;
+
+        // Regex to find all #tags
+        const tagRegex = /#(\w+)/g;
+        const tags = (text.match(tagRegex) || []).map(t => t.toLowerCase());
+
+        const now = new Date();
+        const note = {
+            id: Date.now(),
+            timestamp: now.toISOString(),
+            content: text,
+            dateKey: now.toISOString().split('T')[0],
+            tags: tags // Store tags array
+        };
+
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        notes.push(note);
+        localStorage.setItem('journal_notes', JSON.stringify(notes));
+
+        noteInput.value = '';
+        alert('Note saved with tags: ' + (tags.join(', ') || 'none'));
+    }
+
+    function renderCalendar() {
+        const calendarEl = document.getElementById('calendar');
+        const monthDisplay = document.getElementById('month-display');
+        calendarEl.innerHTML = '';
+
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth();
+        monthDisplay.innerText = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(currentMonth);
+
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        const datesWithNotes = new Set(notes.map(n => n.dateKey));
+
+        // Padding for first day
+        for (let i = 0; i < firstDay; i++) {
+            calendarEl.appendChild(document.createElement('div'));
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dayEl = document.createElement('div');
+            dayEl.className = 'calendar-day';
+            dayEl.innerText = day;
+
+            const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            
+            if (datesWithNotes.has(dateKey)) dayEl.classList.add('has-note');
+            if (new Date().toISOString().split('T')[0] === dateKey) dayEl.classList.add('today');
+
+            dayEl.onclick = () => showNotesForDay(dateKey);
+            calendarEl.appendChild(dayEl);
+        }
+    }
+
+    function showNotesForDay(dateKey) {
+        const notesList = document.getElementById('notes-list');
+        const title = document.getElementById('selected-date-title');
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        
+        const filtered = notes
+            .filter(n => n.dateKey === dateKey)
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+        title.innerText = `Notes for ${dateKey}`;
+        notesList.innerHTML = filtered.length 
+            ? filtered.map(n => `
+                <div class="note-item">
+                    <div class="note-time">${new Date(n.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                    <div class="note-content">${n.content.replace(/\n/g, '<br>')}</div>
+                </div>
+            `).join('')
+            : '<p>No notes for this day.</p>';
+    }
+
+    function changeMonth(offset) {
+        currentMonth.setMonth(currentMonth.getMonth() + offset);
+        renderCalendar();
+    }
+
+    function exportNotes() {
+    const notes = localStorage.getItem('journal_notes');
+    if (!notes || notes === '[]') {
+        alert("No notes to export!");
+        return;
+    }
+
+    const blob = new Blob([notes], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    
+    const timestamp = new Date().toISOString().split('T')[0];
+    a.href = url;
+    a.download = `journal-export-${timestamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function importNotes(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const importedData = JSON.parse(e.target.result);
+            
+            if (!Array.isArray(importedData)) {
+                throw new Error("Invalid format: Expected an array of notes.");
+            }
+
+            // Optional: Merge with existing notes instead of overwriting
+            const existingNotes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+            
+            // Deduplicate by ID (prevents double imports)
+            const existingIds = new Set(existingNotes.map(n => n.id));
+            const newNotes = importedData.filter(n => !existingIds.has(n.id));
+            
+            const mergedNotes = [...existingNotes, ...newNotes];
+            localStorage.setItem('journal_notes', JSON.stringify(mergedNotes));
+
+            alert(`Successfully imported ${newNotes.length} new notes!`);
+            renderCalendar(); // Refresh the view
+        } catch (err) {
+            alert("Error importing file: " + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+function searchNotes() {
+    const query = document.getElementById('search-input').value.toLowerCase();
+    const notesList = document.getElementById('notes-list');
+    const calendarEl = document.getElementById('calendar');
+    const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+
+    // If search is empty, show the calendar and clear results
+    if (query.length === 0) {
+        calendarEl.style.display = 'grid';
+        notesList.innerHTML = '';
+        document.getElementById('selected-date-title').innerText = '';
+        return;
+    }
+
+    // Hide calendar during search for a "Search Results" view
+    calendarEl.style.display = 'none';
+    document.getElementById('selected-date-title').innerText = `Search results for: "${query}"`;
+
+    const filtered = notes.filter(n => 
+        n.content.toLowerCase().includes(query)
+    ).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Newest first
+
+    notesList.innerHTML = filtered.length 
+        ? filtered.map(n => `
+            <div class="note-item">
+                <div class="note-time">${n.dateKey} — ${new Date(n.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                <div class="note-content">${n.content.replace(new RegExp(query, 'gi'), (match) => `<mark>${match}</mark>`)}</div>
+            </div>
+        `).join('')
+        : '<p>No matching notes found.</p>';
+}
+function renderTagCloud() {
+    const cloud = document.getElementById('tag-cloud');
+    const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+    
+    // Flatten all tags and get unique values
+    const allTags = notes.flatMap(n => n.tags || []);
+    const uniqueTags = [...new Set(allTags)];
+
+    cloud.innerHTML = uniqueTags.map(tag => 
+        `<span class="tag" onclick="filterByTag('${tag}')">${tag}</span>`
+    ).join('');
+}
+function filterByTag(tag) {
+    const notesList = document.getElementById('notes-list');
+    const calendarEl = document.getElementById('calendar');
+    const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+
+    calendarEl.style.display = 'none';
+    document.getElementById('selected-date-title').innerText = `Notes tagged with: ${tag}`;
+
+    const filtered = notes.filter(n => 
+        n.tags && n.tags.includes(tag)
+    ).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    notesList.innerHTML = filtered.map(n => `
+        <div class="note-item">
+            <div class="note-time">${n.dateKey} — ${new Date(n.timestamp).toLocaleTimeString()}</div>
+            <div class="note-content">${n.content}</div>
+        </div>
+    `).join('');
+}
+
+</script>
+
+</body>
+</html>
