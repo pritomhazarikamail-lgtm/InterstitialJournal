@@ -13,53 +13,162 @@
 
     <style>
         :root {
-            --bg: #ffffff; --text: #1a1a1a; --accent: #007aff; --secondary: #f2f2f7; --border: #e5e5ea; --card-bg: #ffffff; --success: #34c759; --danger: #ff3b30;
+            --bg: #f8f9fa; /* Softer background */
+            --text: #1a1a1a;
+            --accent: #007aff;
+            --secondary: #ffffff;
+            --border: #e5e5ea;
+            --card-bg: #ffffff;
+            --success: #34c759;
+            --danger: #ff3b30;
         }
+
         body.dark-mode {
-            --bg: #1c1c1e; --text: #f2f2f7; --accent: #0a84ff; --secondary: #2c2c2e; --border: #3a3a3c; --card-bg: #2c2c2e;
+            --bg: #121212; /* Deeper black for OLED */
+            --text: #f2f2f7;
+            --accent: #0a84ff;
+            --secondary: #1c1c1e;
+            --border: #2c2c2e;
+            --card-bg: #1c1c1e;
         }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg); color: var(--text); line-height: 1.6; margin: 0; display: flex; justify-content: center; transition: background 0.2s;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            transition: background 0.2s;
+            padding-bottom: 80px; /* Space for bottom nav */
         }
+
         .container {
-            width: 100%; max-width: 600px;
-            padding-top: max(40px, env(safe-area-inset-top));
-            padding-bottom: max(40px, env(safe-area-inset-bottom));
-            padding-left: 20px; padding-right: 20px; box-sizing: border-box;
+            width: 100%;
+            max-width: 500px;
+            padding-top: max(20px, env(safe-area-inset-top));
+            padding-left: 20px;
+            padding-right: 20px;
+            box-sizing: border-box;
         }
+
+        /* Bottom Navigation */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: var(--card-bg);
+            display: flex;
+            justify-content: space-around;
+            padding: 12px 0 calc(12px + env(safe-area-inset-bottom));
+            border-top: 1px solid var(--border);
+            z-index: 1000;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+        }
+
+        .nav-item {
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            opacity: 0.6;
+            cursor: pointer;
+        }
+
+        .nav-item.active { opacity: 1; color: var(--accent); }
+
         .theme-toggle {
-            position: fixed; top: max(20px, env(safe-area-inset-top)); right: 20px;
-            background: var(--secondary); color: var(--text); padding: 8px; border-radius: 50%;
-            width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
-            border: 1px solid var(--border); cursor: pointer; z-index: 1000;
+            position: fixed;
+            top: max(20px, env(safe-area-inset-top));
+            right: 20px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1001;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
-        h1, h2, h3 { font-weight: 700; margin-top: 0; }
-        .hidden { display: none; }
+
+        /* Card Layout */
+        .note-item {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 18px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         textarea {
-            width: 100%; height: 160px; padding: 15px; border: 1px solid var(--border); border-radius: 12px;
-            font-size: 1rem; resize: none; box-sizing: border-box; outline: none; background: var(--card-bg); color: var(--text); font-family: inherit;
+            width: 100%;
+            height: 200px;
+            padding: 20px;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            font-size: 1.05rem;
+            resize: none;
+            box-sizing: border-box;
+            outline: none;
+            background: var(--card-bg);
+            color: var(--text);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+            margin-bottom: 20px;
         }
-        .controls { margin-top: 15px; display: flex; justify-content: space-between; align-items: center; }
-        button { background-color: var(--accent); color: white; border: none; padding: 12px 20px; border-radius: 10px; cursor: pointer; font-weight: 600; }
-        .link-btn { color: var(--accent); text-decoration: none; font-size: 0.95rem; cursor: pointer; font-weight: 500; }
-        .heatmap-container { margin-bottom: 30px; background: var(--secondary); padding: 15px; border-radius: 12px; }
-        .heatmap-grid { display: grid; grid-template-columns: repeat(22, 1fr); gap: 3px; margin-top: 10px; }
-        .heatmap-cell { aspect-ratio: 1/1; border-radius: 2px; background-color: var(--border); cursor: pointer; }
+
+        /* Elements */
+        .duration-badge {
+            display: inline-block;
+            background: var(--accent);
+            color: white;
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+
+        .tag {
+            background: var(--secondary);
+            padding: 6px 12px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            border: 1px solid var(--border);
+            margin-right: 6px;
+            cursor: pointer;
+        }
+
+        .heatmap-container { margin-bottom: 25px; background: var(--card-bg); padding: 15px; border-radius: 18px; border: 1px solid var(--border); }
+        .heatmap-grid { display: grid; grid-template-columns: repeat(22, 1fr); gap: 4px; margin-top: 10px; }
+        .heatmap-cell { aspect-ratio: 1/1; border-radius: 3px; background-color: var(--border); cursor: pointer; }
         .lvl-1 { background-color: #9be9a8; } .lvl-2 { background-color: #40c463; } .lvl-3 { background-color: #30a14e; } .lvl-4 { background-color: #216e39; }
-        .note-item { padding: 15px 0; border-bottom: 1px solid var(--border); }
-        .note-meta { font-size: 0.75rem; color: #8e8e93; display: flex; justify-content: space-between; }
-        .note-actions { margin-top: 10px; display: flex; gap: 15px; }
-        .action-link { font-size: 0.8rem; cursor: pointer; background: none; border: none; font-weight: 500; }
-        .edit-link { color: var(--accent); } .delete-link { color: var(--danger); }
-        .storage-footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid var(--border); display: flex; gap: 15px; }
-        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; margin-bottom: 25px; }
-        .calendar-day { padding: 10px 0; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
-        .has-note { font-weight: bold; color: var(--accent); text-decoration: underline; }
-        .tag { background: var(--secondary); padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; cursor: pointer; margin-right: 5px; }
-        .duration-badge { display: inline-block; background: var(--accent); color: white; font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; font-weight: 600; opacity: 0.8; }
-        body.dark-mode .duration-badge { background: var(--secondary); color: var(--accent); border: 1px solid var(--accent); }
-        mark { background: #ffcc00; color: black; border-radius: 2px; }
+
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 25px; }
+        .calendar-day { padding: 12px 0; border-radius: 12px; cursor: pointer; text-align: center; font-size: 0.9rem; }
+        .has-note { font-weight: 800; color: var(--accent); background: rgba(0,122,255,0.05); }
+
+        .hidden { display: none; }
+        button.primary-btn { width: 100%; padding: 16px; border-radius: 14px; font-size: 1rem; border: none; background: var(--accent); color: white; font-weight: 700; cursor: pointer; }
+        .action-link { font-size: 0.85rem; font-weight: 600; cursor: pointer; background: none; border: none; margin-right: 15px; padding: 0; }
+        .delete-link { color: var(--danger); }
+        .edit-link { color: var(--accent); }
     </style>
 </head>
 <body class="dark-mode">
@@ -68,80 +177,81 @@
     <button class="theme-toggle" onclick="toggleDarkMode()">🌓</button>
 
     <div id="home-page">
-        <h1>New Entry</h1>
-        <textarea id="note-input" placeholder="What's happening? Use #tags..."></textarea>
-        <div class="controls">
-            <a class="link-btn" onclick="showPage('history-page')">View History</a>
-            <button onclick="saveNote()">Save Note</button>
-        </div>
+        <h1 style="margin-bottom: 25px;">How's it going?</h1>
+        <textarea id="note-input" placeholder="Start typing... use #tags for projects"></textarea>
+        <button class="primary-btn" onclick="saveNote()">Save Memory</button>
     </div>
 
     <div id="history-page" class="hidden">
-        <div class="calendar-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-            <a class="link-btn" onclick="showPage('home-page')">← Back</a>
-            <h2 id="month-display" style="margin:0; font-size: 1.2rem;"></h2>
-            <div>
-                <button onclick="changeMonth(-1)" style="padding: 5px 12px;">‹</button>
-                <button onclick="changeMonth(1)" style="padding: 5px 12px;">›</button>
+        <div class="calendar-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 id="month-display" style="margin:0; font-size: 1.1rem;"></h2>
+            <div style="display: flex; gap: 8px;">
+                <button onclick="changeMonth(-1)" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text);">‹</button>
+                <button onclick="changeMonth(1)" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text);">›</button>
             </div>
         </div>
 
         <div class="heatmap-container">
-            <small style="font-size: 0.7rem;">ACTIVITY (LAST 5 MONTHS)</small>
+            <small style="opacity: 0.5; font-weight: 700; letter-spacing: 0.05rem;">ACTIVITY</small>
             <div id="heatmap-grid" class="heatmap-grid"></div>
         </div>
 
-        <div id="tag-cloud" style="margin-bottom: 20px;"></div>
+        <div id="tag-cloud" style="margin-bottom: 25px; display: flex; flex-wrap: wrap; gap: 8px;"></div>
 
-        <input type="text" id="search-input" placeholder="Search notes..." oninput="searchNotes()" 
-               style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 20px; box-sizing: border-box; background: var(--card-bg); color: var(--text);">
+        <input type="text" id="search-input" placeholder="Search your thoughts..." oninput="searchNotes()" 
+               style="width: 100%; padding: 14px; border-radius: 14px; border: 1px solid var(--border); margin-bottom: 25px; box-sizing: border-box; background: var(--card-bg); color: var(--text); font-size: 1rem;">
 
         <div id="calendar" class="calendar-grid"></div>
 
         <div id="day-notes">
-            <div id="llm-controls" style="margin-top: 20px; padding: 15px; background: var(--secondary); border-radius: 12px; display: none;">
-                <button id="summarize-btn" onclick="generateDailySummary()">✨ Summarize My Day</button>
-                <div id="llm-status" style="font-size: 0.7rem; margin-top: 5px; color: #8e8e93;"></div>
-                <div id="daily-summary-output" style="margin-top: 15px; font-style: italic; font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap;"></div>
+            <div id="llm-controls" style="margin-bottom: 25px; padding: 20px; background: var(--accent); color: white; border-radius: 18px; display: none;">
+                <button id="summarize-btn" onclick="generateDailySummary()" style="background: white; color: var(--accent); border: none; padding: 10px 18px; border-radius: 10px; font-weight: 700; width: 100%;">✨ Summarize This Day</button>
+                <div id="llm-status" style="font-size: 0.7rem; margin-top: 8px; text-align: center; opacity: 0.9;"></div>
+                <div id="daily-summary-output" style="margin-top: 15px; font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; background: rgba(255,255,255,0.1); padding: 15px; border-radius: 12px;"></div>
             </div>
-            <h3 id="selected-date-title" style="font-size: 1rem; color: #8e8e93; margin-top: 20px;"></h3>
+            <h3 id="selected-date-title" style="font-size: 0.9rem; color: #8e8e93; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.05rem;"></h3>
             <div id="notes-list"></div>
         </div>
 
-        <div class="storage-footer">
-            <button onclick="exportNotes()" style="background-color: var(--success);">Export JSON</button>
-            <label class="link-btn" style="border: 1px solid var(--accent); padding: 10px 15px; border-radius: 10px;">
-                Import JSON <input type="file" id="import-file" accept=".json" style="display: none;" onchange="importNotes(event)">
+        <div class="storage-footer" style="padding-bottom: 40px;">
+            <button onclick="exportNotes()" style="background: var(--card-bg); border: 1px solid var(--border); color: var(--text); padding: 12px; border-radius: 12px; flex: 1; font-weight: 600;">Export</button>
+            <label style="background: var(--card-bg); border: 1px solid var(--border); color: var(--text); padding: 12px; border-radius: 12px; flex: 1; text-align: center; font-weight: 600; cursor: pointer;">
+                Import <input type="file" id="import-file" accept=".json" style="display: none;" onchange="importNotes(event)">
             </label>
         </div>
     </div>
+
+    <nav class="bottom-nav">
+        <button class="nav-item active" id="nav-write" onclick="showPage('home-page')">
+            <span style="font-size: 1.2rem;">✍️</span> Write
+        </button>
+        <button class="nav-item" id="nav-history" onclick="showPage('history-page')">
+            <span style="font-size: 1.2rem;">📚</span> History
+        </button>
+    </nav>
 </div>
 
 <script type="module">
-    /* -------------------------------------------------------------------------- */
-    /* 1. GLOBAL STATE & CONFIG                                                  */
-    /* -------------------------------------------------------------------------- */
     let currentMonth = new Date();
     const noteInput = document.getElementById('note-input');
-    let engine; 
+    let engine;
     const modelId = "Llama-3.2-1B-Instruct-q4f16_1-MLC"; 
 
-    // Helper: Standardized YYYY-MM-DD for cross-device consistency
     const getISODate = (date) => {
         const d = new Date(date);
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
 
-    /* -------------------------------------------------------------------------- */
-    /* 2. NAVIGATION & THEME                                                     */
-    /* -------------------------------------------------------------------------- */
     function showPage(pageId) {
         document.getElementById('home-page').classList.toggle('hidden', pageId !== 'home-page');
         document.getElementById('history-page').classList.toggle('hidden', pageId !== 'history-page');
         
+        // Update Nav UI
+        document.getElementById('nav-write').classList.toggle('active', pageId === 'home-page');
+        document.getElementById('nav-history').classList.toggle('active', pageId === 'history-page');
+
         if (pageId === 'history-page') {
             renderAll();
-            // Reset view state
             document.getElementById('notes-list').innerHTML = '';
             document.getElementById('selected-date-title').innerText = '';
             document.getElementById('search-input').value = '';
@@ -154,13 +264,9 @@
         localStorage.setItem('dark_mode', isDark);
     }
 
-    /* -------------------------------------------------------------------------- */
-    /* 3. CORE JOURNAL LOGIC (CRUD)                                              */
-    /* -------------------------------------------------------------------------- */
     function saveNote() {
         const text = noteInput.value.trim();
         if (!text) return;
-
         const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
         const now = new Date();
         notes.push({
@@ -170,42 +276,11 @@
             dateKey: getISODate(now),
             tags: (text.match(/#(\w+)/g) || []).map(t => t.toLowerCase())
         });
-
         localStorage.setItem('journal_notes', JSON.stringify(notes));
         noteInput.value = '';
-        alert('Entry saved!');
+        alert('Saved successfully!');
     }
 
-    function deleteNote(id) {
-        if(!confirm('Permanently delete this entry?')) return;
-        let notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        notes = notes.filter(n => n.id !== id);
-        localStorage.setItem('journal_notes', JSON.stringify(notes));
-        
-        // Refresh the current view
-        const currentTitle = document.getElementById('selected-date-title').innerText;
-        if (currentTitle.includes("for ")) {
-            showNotesForDay(currentTitle.split("for ")[1]);
-        }
-        renderAll();
-    }
-
-    function editNote(id) {
-        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        const idx = notes.findIndex(n => n.id === id);
-        const newText = prompt("Update note content:", notes[idx].content);
-        
-        if (newText !== null && newText.trim() !== "") {
-            notes[idx].content = newText.trim();
-            notes[idx].tags = (newText.match(/#(\w+)/g) || []).map(t => t.toLowerCase());
-            localStorage.setItem('journal_notes', JSON.stringify(notes));
-            showNotesForDay(notes[idx].dateKey);
-        }
-    }
-
-    /* -------------------------------------------------------------------------- */
-    /* 4. RENDERING ENGINE                                                       */
-    /* -------------------------------------------------------------------------- */
     function renderAll() {
         renderHeatmap();
         renderTagCloud();
@@ -218,7 +293,6 @@
         const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
         const counts = notes.reduce((acc, n) => { acc[n.dateKey] = (acc[n.dateKey] || 0) + 1; return acc; }, {});
         const today = new Date();
-
         for (let i = 153; i >= 0; i--) {
             const d = new Date(); d.setDate(today.getDate() - i);
             const key = getISODate(d);
@@ -241,12 +315,9 @@
         const first = new Date(year, month, 1).getDay();
         const days = new Date(year, month + 1, 0).getDate();
         const noteDates = new Set(JSON.parse(localStorage.getItem('journal_notes') || '[]').map(n => n.dateKey));
-        
-        // Dynamic selection highlighting
         const viewingDate = document.getElementById('selected-date-title').innerText.split("for ")[1];
 
         for(let i=0; i<first; i++) cal.appendChild(document.createElement('div'));
-        
         for(let d=1; d<=days; d++) {
             const key = `${year}-${String(month+1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
             const el = document.createElement('div');
@@ -277,7 +348,6 @@
             .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
         title.innerText = `Notes for ${dateKey}`;
-        
         if (llmControls) {
             llmControls.style.display = filtered.length > 0 ? 'block' : 'none';
             summaryOutput.innerText = ''; 
@@ -288,7 +358,7 @@
             if (i > 0) {
                 const diff = new Date(n.timestamp) - new Date(filtered[i - 1].timestamp);
                 const duration = formatDuration(diff);
-                if (duration) durationHtml = `<div class="duration-badge">⏱️ Gap: ${duration}</div>`;
+                if (duration) durationHtml = `<div class="duration-badge">⏱️ ${duration} elapsed</div>`;
             }
 
             return `
@@ -297,39 +367,29 @@
                     <div class="note-meta">
                         <span>${new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                     </div>
-                    <div class="note-text">${n.content.replace(/\n/g, '<br>')}</div>
+                    <div class="note-text" style="margin: 10px 0; font-size: 1.05rem;">${n.content.replace(/\n/g, '<br>')}</div>
                     <div class="note-actions">
                         <button class="action-link edit-link" onclick="window.editNote(${n.id})">Edit</button> 
                         <button class="action-link delete-link" onclick="window.deleteNote(${n.id})">Delete</button>
                     </div>
                 </div>`;
-        }).join('') : '<p style="color: #8e8e93;">No entries for this date.</p>';
+        }).join('') : '<p style="color: #8e8e93; text-align:center; padding: 40px 0;">No memories found for this day.</p>';
         
-        renderCalendar(); // Forces refresh to update selection color
+        renderCalendar();
         title.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    /* -------------------------------------------------------------------------- */
-    /* 5. LOCAL AI & SEARCH                                                      */
-    /* -------------------------------------------------------------------------- */
     async function initLLM() {
         const status = document.getElementById('llm-status');
         if (engine) return;
-
         try {
-            status.innerText = "Connecting to local GPU...";
-            // Dynamic import for non-blocking performance
+            status.innerText = "Connecting to local AI engine...";
             const webllm = await import("https://esm.run/@mlc-ai/web-llm");
-            
             if (!navigator.gpu) throw new Error("WebGPU Not Supported");
-
-            status.innerText = "Initializing Llama 3.2...";
-            engine = await webllm.CreateMLCEngine(modelId, { 
-                initProgressCallback: (report) => status.innerText = report.text 
-            });
-            status.innerText = "Local LLM Ready";
+            engine = await webllm.CreateMLCEngine(modelId, { initProgressCallback: (report) => status.innerText = report.text });
+            status.innerText = "AI Coach Ready";
         } catch (e) {
-            status.innerText = "Error: " + e.message;
+            status.innerText = "AI Unavailable: " + e.message;
             throw e;
         }
     }
@@ -339,18 +399,14 @@
         const output = document.getElementById('daily-summary-output');
         const btn = document.getElementById('summarize-btn');
         const noteTexts = Array.from(list.querySelectorAll('.note-text')).map(el => el.innerText).join("\n- ");
-
         try {
             await initLLM();
             btn.disabled = true;
-            output.innerText = "Generating summary...";
+            output.innerText = "Synthesizing your day...";
             const messages = [
-                    { 
-                        role: "system", 
-                        content: "You are a warm, encouraging life coach. Summarize the user's day by highlighting their wins, things they were grateful for, and a small positive takeaway for tomorrow." 
-                    },
-                    { role: "user", content: `Here are my thoughts from today:\n- ${noteTexts}` }
-                ];
+                { role: "system", content: "You are a warm, encouraging life coach. Summarize the user's day by highlighting their wins, things they were grateful for, and a small positive takeaway for tomorrow." },
+                { role: "user", content: `Logs:\n- ${noteTexts}` }
+            ];
             const reply = await engine.chat.completions.create({ messages });
             output.innerText = reply.choices[0].message.content;
         } catch (err) { console.error(err); } finally { btn.disabled = false; }
@@ -369,19 +425,16 @@
         }
 
         cal.style.display = 'none';
-        title.innerText = `Search: "${query}"`;
+        title.innerText = `Search results for "${query}"`;
         const filtered = notes.filter(n => n.content.toLowerCase().includes(query)).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
         
         list.innerHTML = filtered.map(n => `
             <div class="note-item">
-                <small>${n.dateKey}</small>
-                <div class="note-text">${n.content.replace(new RegExp(query, 'gi'), m => `<mark>${m}</mark>`)}</div>
-            </div>`).join('') || '<p>No matches found.</p>';
+                <small style="opacity: 0.5;">${n.dateKey}</small>
+                <div class="note-text" style="margin-top: 10px;">${n.content.replace(new RegExp(query, 'gi'), m => `<mark>${m}</mark>`)}</div>
+            </div>`).join('') || '<p style="text-align:center; padding: 40px 0;">No matches found.</p>';
     }
 
-    /* -------------------------------------------------------------------------- */
-    /* 6. STORAGE & HELPERS                                                      */
-    /* -------------------------------------------------------------------------- */
     function formatDuration(ms) {
         const mins = Math.floor(ms / 60000);
         if (mins < 1) return null;
@@ -400,35 +453,61 @@
         document.getElementById('selected-date-title').innerText = `Tag: #${tag}`;
         document.getElementById('notes-list').innerHTML = notes.map(n => `
             <div class="note-item">
-                <small>${n.dateKey}</small>
-                <div class="note-text">${n.content}</div>
+                <small style="opacity: 0.5;">${n.dateKey}</small>
+                <div class="note-text" style="margin-top: 10px;">${n.content}</div>
             </div>`).join('');
     }
 
+    function deleteNote(id) {
+        if(!confirm('Delete this memory permanently?')) return;
+        let notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.id !== id);
+        localStorage.setItem('journal_notes', JSON.stringify(notes));
+        renderAll();
+        document.getElementById('notes-list').innerHTML = '';
+    }
+
+    function editNote(id) {
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        const idx = notes.findIndex(n => n.id === id);
+        const newText = prompt("Update your note:", notes[idx].content);
+        if (newText) {
+            notes[idx].content = newText;
+            localStorage.setItem('journal_notes', JSON.stringify(notes));
+            showNotesForDay(notes[idx].dateKey);
+        }
+    }
+
     function changeMonth(dir) { currentMonth.setMonth(currentMonth.getMonth() + dir); renderCalendar(); }
-    
     function exportNotes() {
         const blob = new Blob([localStorage.getItem('journal_notes')], { type: 'application/json' });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'journal.json'; a.click();
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'journal-backup.json'; a.click();
     }
-    
     function importNotes(event) {
         const reader = new FileReader();
-        reader.onload = (e) => { localStorage.setItem('journal_notes', e.target.result); renderAll(); alert('Imported!'); };
+        reader.onload = (e) => { localStorage.setItem('journal_notes', e.target.result); renderAll(); alert('Journal restored!'); };
         reader.readAsText(event.target.files[0]);
     }
 
-    // 7. WINDOW BINDINGS (Essential for onclick support in modules)
     Object.assign(window, {
         showPage, toggleDarkMode, saveNote, deleteNote, editNote, generateDailySummary,
         changeMonth, exportNotes, importNotes, filterByTag, showNotesForDay, searchNotes
     });
 
-    // 8. INITIALIZATION
     (function init() {
         const saved = localStorage.getItem('dark_mode');
         if (saved === 'false') document.body.classList.remove('dark-mode');
-        if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').then(reg => {
+                reg.onupdatefound = () => {
+                    const installingWorker = reg.installing;
+                    installingWorker.onstatechange = () => {
+                        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            if(confirm("Updates installed! Reload to see changes?")) window.location.reload();
+                        }
+                    };
+                };
+            });
+        }
     })();
 </script>
 </body>
