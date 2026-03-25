@@ -2,10 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Interstitial Journal</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#007aff">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
     <style>
-        /* Update your existing :root and add the .dark-mode class */
         :root {
             --bg: #ffffff;
             --text: #1a1a1a;
@@ -13,6 +19,8 @@
             --secondary: #f2f2f7;
             --border: #e5e5ea;
             --card-bg: #ffffff;
+            --success: #34c759; /* Added this */
+            --danger: #ff3b30;  /* Added this */
         }
 
         body.dark-mode {
@@ -24,10 +32,6 @@
             --card-bg: #2c2c2e;
         }
 
-        /* Update your existing heatmap colors for better dark mode visibility */
-        body.dark-mode .lvl-0 { background-color: #3a3a3c; }
-        body.dark-mode .tag { background-color: #3a3a3c; color: var(--accent); }
-
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg);
@@ -36,18 +40,41 @@
             margin: 0;
             display: flex;
             justify-content: center;
+            transition: background 0.2s;
         }
 
         .container {
             width: 100%;
             max-width: 600px;
-            padding: 40px 20px;
+            /* Dynamic padding: min 40px, or safe area for S25 Ultra camera */
+            padding-top: max(40px, env(safe-area-inset-top));
+            padding-bottom: max(40px, env(safe-area-inset-bottom));
+            padding-left: 20px;
+            padding-right: 20px;
+            box-sizing: border-box;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: max(20px, env(safe-area-inset-top));
+            right: 20px;
+            background: var(--secondary);
+            color: var(--text);
+            padding: 8px;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            z-index: 1000;
         }
 
         h1, h2, h3 { font-weight: 700; margin-top: 0; }
         .hidden { display: none; }
 
-        /* --- UI COMPONENTS --- */
         textarea {
             width: 100%;
             height: 160px;
@@ -58,10 +85,10 @@
             resize: none;
             box-sizing: border-box;
             outline: none;
-            transition: border-color 0.2s;
+            background: var(--card-bg);
+            color: var(--text);
             font-family: inherit;
         }
-        textarea:focus { border-color: var(--accent); }
 
         .controls {
             margin-top: 15px;
@@ -74,23 +101,21 @@
             background-color: var(--accent);
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
+            padding: 12px 20px;
+            border-radius: 10px;
             cursor: pointer;
             font-weight: 600;
-            font-size: 0.9rem;
         }
-        button:hover { opacity: 0.9; }
 
         .link-btn {
             color: var(--accent);
             text-decoration: none;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
             cursor: pointer;
             font-weight: 500;
         }
 
-        /* --- HEATMAP --- */
+        /* Heatmap Styles */
         .heatmap-container {
             margin-bottom: 30px;
             background: var(--secondary);
@@ -100,97 +125,26 @@
         .heatmap-grid {
             display: grid;
             grid-template-columns: repeat(22, 1fr);
-            grid-template-rows: repeat(7, 1fr);
             gap: 3px;
             margin-top: 10px;
         }
         .heatmap-cell {
-            width: 100%;
             aspect-ratio: 1/1;
             border-radius: 2px;
-            background-color: #d1d1d6;
-            cursor: pointer;
+            background-color: var(--border);
         }
-        .lvl-0 { background-color: #e5e5ea; }
         .lvl-1 { background-color: #9be9a8; }
         .lvl-2 { background-color: #40c463; }
         .lvl-3 { background-color: #30a14e; }
         .lvl-4 { background-color: #216e39; }
 
-        /* --- CALENDAR --- */
-        .calendar-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-        .calendar-grid {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 5px;
-            text-align: center;
-            margin-bottom: 25px;
-        }
-        .calendar-day {
-            padding: 10px 0;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.85rem;
-        }
-        .calendar-day:hover { background-color: var(--secondary); }
-        .has-note { font-weight: bold; color: var(--accent); text-decoration: underline; }
-        .today { background-color: var(--secondary); border: 1px solid var(--accent); }
-
-        /* --- TAGS & SEARCH --- */
-        #tag-cloud { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
-        .tag {
-            background: var(--secondary);
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            cursor: pointer;
-            border: 1px solid transparent;
-        }
-        .tag:hover { border-color: var(--accent); }
-
-        .search-input {
-            width: 100%;
-            padding: 12px;
-            border-radius: 10px;
-            border: 1px solid var(--border);
-            margin-bottom: 20px;
-            box-sizing: border-box;
-            font-size: 0.95rem;
-        }
-
-        /* --- NOTES LIST --- */
-        .note-item {
-            padding: 15px 0;
-            border-bottom: 1px solid var(--border);
-        }
-        .note-meta {
-            font-size: 0.75rem;
-            color: #8e8e93;
-            margin-bottom: 5px;
-            display: flex;
-            justify-content: space-between;
-        }
-        .note-actions {
-            margin-top: 8px;
-            display: flex;
-            gap: 15px;
-        }
-        .action-link {
-            font-size: 0.75rem;
-            cursor: pointer;
-            background: none;
-            border: none;
-            padding: 0;
-            font-weight: 500;
-        }
+        /* Notes History */
+        .note-item { padding: 15px 0; border-bottom: 1px solid var(--border); }
+        .note-meta { font-size: 0.75rem; color: #8e8e93; display: flex; justify-content: space-between; }
+        .note-actions { margin-top: 10px; display: flex; gap: 15px; }
+        .action-link { font-size: 0.8rem; cursor: pointer; background: none; border: none; font-weight: 500; }
         .edit-link { color: var(--accent); }
         .delete-link { color: var(--danger); }
-        mark { background-color: #fff3b0; border-radius: 2px; }
 
         .storage-footer {
             margin-top: 50px;
@@ -199,19 +153,20 @@
             display: flex;
             gap: 15px;
         }
+        
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; margin-bottom: 25px; }
+        .calendar-day { padding: 10px 0; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
+        .has-note { font-weight: bold; color: var(--accent); text-decoration: underline; }
+        
+        .tag { background: var(--secondary); padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; cursor: pointer; margin-right: 5px; }
     </style>
 </head>
-<body>
+<body class="dark-mode"> <div class="container">
+    <button class="theme-toggle" onclick="toggleDarkMode()">🌓</button>
 
-<div class="container">
     <div id="home-page">
-        <div style="position: absolute; top: 20px; right: 20px;">
-            <button onclick="toggleDarkMode()" style="background: var(--secondary); color: var(--text); padding: 8px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border);">
-                🌓
-            </button>
-        </div>
         <h1>New Entry</h1>
-        <textarea id="note-input" placeholder="What's happening? Use #tags to organize..."></textarea>
+        <textarea id="note-input" placeholder="What's happening? Use #tags..."></textarea>
         <div class="controls">
             <a class="link-btn" onclick="showPage('history-page')">View History</a>
             <button onclick="saveNote()">Save Note</button>
@@ -219,12 +174,7 @@
     </div>
 
     <div id="history-page" class="hidden">
-        <div style="position: absolute; top: 20px; right: 20px;">
-            <button onclick="toggleDarkMode()" style="background: var(--secondary); color: var(--text); padding: 8px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border);">
-                🌓
-            </button>
-        </div>
-        <div class="calendar-header">
+        <div class="calendar-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
             <a class="link-btn" onclick="showPage('home-page')">← Back</a>
             <h2 id="month-display" style="margin:0; font-size: 1.2rem;"></h2>
             <div>
@@ -234,25 +184,26 @@
         </div>
 
         <div class="heatmap-container">
-            <small style="font-size: 0.7rem; color: #666;">ACTIVITY (LAST 5 MONTHS)</small>
+            <small style="font-size: 0.7rem;">ACTIVITY (LAST 5 MONTHS)</small>
             <div id="heatmap-grid" class="heatmap-grid"></div>
         </div>
 
-        <div id="tag-cloud"></div>
+        <div id="tag-cloud" style="margin-bottom: 20px;"></div>
 
-        <input type="text" id="search-input" class="search-input" placeholder="Search your thoughts..." oninput="searchNotes()">
+        <input type="text" id="search-input" placeholder="Search notes..." oninput="searchNotes()" 
+               style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 20px; box-sizing: border-box; background: var(--card-bg); color: var(--text);">
 
         <div id="calendar" class="calendar-grid"></div>
 
         <div id="day-notes">
-            <h3 id="selected-date-title" style="font-size: 1rem; color: #666;"></h3>
+            <h3 id="selected-date-title" style="font-size: 1rem; color: #8e8e93;"></h3>
             <div id="notes-list"></div>
         </div>
 
         <div class="storage-footer">
             <button onclick="exportNotes()" style="background-color: var(--success);">Export JSON</button>
-            <label class="link-btn" style="border: 1px solid var(--accent); padding: 8px 15px; border-radius: 8px;">
-                Import JSON <input type="file" accept=".json" style="display: none;" onchange="importNotes(event)">
+            <label class="link-btn" style="border: 1px solid var(--accent); padding: 10px 15px; border-radius: 10px;">
+                Import JSON <input type="file" id="import-file" accept=".json" style="display: none;" onchange="importNotes(event)">
             </label>
         </div>
     </div>
@@ -262,71 +213,46 @@
     let currentMonth = new Date();
     const noteInput = document.getElementById('note-input');
 
-    // --- NAVIGATION ---
     function showPage(pageId) {
-        document.getElementById('home-page').classList.add('hidden');
-        document.getElementById('history-page').classList.add('hidden');
-        document.getElementById(pageId).classList.remove('hidden');
+        document.getElementById('home-page').classList.toggle('hidden', pageId !== 'home-page');
+        document.getElementById('history-page').classList.toggle('hidden', pageId !== 'history-page');
         
         if (pageId === 'history-page') {
             renderHeatmap();
             renderTagCloud();
             renderCalendar();
-            // Clear previous view state
-            document.getElementById('calendar').style.display = 'grid';
             document.getElementById('notes-list').innerHTML = '';
-            document.getElementById('selected-date-title').innerText = '';
-            document.getElementById('search-input').value = '';
         }
-    }
-
-    // --- DATA CORE ---
-    function getNotes() {
-        return JSON.parse(localStorage.getItem('journal_notes') || '[]');
     }
 
     function saveNote() {
         const text = noteInput.value.trim();
         if (!text) return;
-
-        const tags = (text.match(/#(\w+)/g) || []).map(t => t.toLowerCase());
-        const now = new Date();
-        const note = {
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        notes.push({
             id: Date.now(),
-            timestamp: now.toISOString(),
+            timestamp: new Date().toISOString(),
             content: text,
-            dateKey: now.toLocaleDateString('en-CA'), // YYYY-MM-DD
-            tags: tags
-        };
-
-        const notes = getNotes();
-        notes.push(note);
+            dateKey: new Date().toLocaleDateString('en-CA'),
+            tags: (text.match(/#(\w+)/g) || []).map(t => t.toLowerCase())
+        });
         localStorage.setItem('journal_notes', JSON.stringify(notes));
-
         noteInput.value = '';
-        alert('Note saved!');
+        alert('Saved!');
     }
 
-    // --- RENDERING LOGIC ---
     function renderHeatmap() {
         const grid = document.getElementById('heatmap-grid');
         grid.innerHTML = '';
-        const notes = getNotes();
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
         const counts = notes.reduce((acc, n) => { acc[n.dateKey] = (acc[n.dateKey] || 0) + 1; return acc; }, {});
-
         const today = new Date();
         for (let i = 153; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(today.getDate() - i);
+            const d = new Date(); d.setDate(today.getDate() - i);
             const key = d.toLocaleDateString('en-CA');
             const count = counts[key] || 0;
-            
-            let lvl = 0;
-            if (count > 0) lvl = Math.min(Math.ceil(count / 2), 4);
-
             const cell = document.createElement('div');
-            cell.className = `heatmap-cell lvl-${lvl}`;
-            cell.title = `${key}: ${count} notes`;
+            cell.className = 'heatmap-cell' + (count > 0 ? ` lvl-${Math.min(count, 4)}` : '');
             cell.onclick = () => showNotesForDay(key);
             grid.appendChild(cell);
         }
@@ -334,139 +260,73 @@
 
     function renderCalendar() {
         const cal = document.getElementById('calendar');
-        const display = document.getElementById('month-display');
         cal.innerHTML = '';
-        
-        const year = currentMonth.getFullYear();
         const month = currentMonth.getMonth();
-        display.innerText = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(currentMonth);
-
-        const firstDay = new Date(year, month, 1).getDay();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const datesWithNotes = new Set(getNotes().map(n => n.dateKey));
-
-        for (let i = 0; i < firstDay; i++) cal.appendChild(document.createElement('div'));
+        const year = currentMonth.getFullYear();
+        document.getElementById('month-display').innerText = new Intl.DateTimeFormat('en-US', {month:'long', year:'numeric'}).format(currentMonth);
         
-        for (let day = 1; day <= daysInMonth; day++) {
-            const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            const dayEl = document.createElement('div');
-            dayEl.className = 'calendar-day' + (datesWithNotes.has(dateKey) ? ' has-note' : '');
-            if (new Date().toLocaleDateString('en-CA') === dateKey) dayEl.classList.add('today');
-            dayEl.innerText = day;
-            dayEl.onclick = () => showNotesForDay(dateKey);
-            cal.appendChild(dayEl);
+        const first = new Date(year, month, 1).getDay();
+        const days = new Date(year, month + 1, 0).getDate();
+        const noteDates = new Set(JSON.parse(localStorage.getItem('journal_notes') || '[]').map(n => n.dateKey));
+
+        for(let i=0; i<first; i++) cal.appendChild(document.createElement('div'));
+        for(let d=1; d<=days; d++) {
+            const key = `${year}-${String(month+1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const el = document.createElement('div');
+            el.className = 'calendar-day' + (noteDates.has(key) ? ' has-note' : '');
+            if (new Date().toLocaleDateString('en-CA') === key) el.style.border = '1px solid var(--accent)';
+            el.innerText = d;
+            el.onclick = () => showNotesForDay(key);
+            cal.appendChild(el);
         }
     }
 
     function showNotesForDay(dateKey) {
         const list = document.getElementById('notes-list');
-        const title = document.getElementById('selected-date-title');
-        const filtered = getNotes().filter(n => n.dateKey === dateKey).sort((a,b) => a.id - b.id);
-        
-        title.innerText = `Notes for ${dateKey}`;
-        list.innerHTML = filtered.map(n => renderNoteTemplate(n)).join('') || '<p style="color:#888">No entries for this date.</p>';
-    }
-
-    function renderNoteTemplate(n, highlightQuery = "") {
-        let displayContent = n.content.replace(/\n/g, '<br>');
-        if (highlightQuery) {
-            const regex = new RegExp(`(${highlightQuery})`, 'gi');
-            displayContent = displayContent.replace(regex, '<mark>$1</mark>');
-        }
-
-        return `
-            <div class="note-item" id="note-${n.id}">
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        const filtered = notes.filter(n => n.dateKey === dateKey);
+        document.getElementById('selected-date-title').innerText = `Notes for ${dateKey}`;
+        list.innerHTML = filtered.map(n => `
+            <div class="note-item">
                 <div class="note-meta">
                     <span>${new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                    <span>${n.dateKey}</span>
                 </div>
-                <div class="note-text">${displayContent}</div>
+                <div>${n.content}</div>
                 <div class="note-actions">
                     <button class="action-link edit-link" onclick="editNote(${n.id})">Edit</button>
                     <button class="action-link delete-link" onclick="deleteNote(${n.id})">Delete</button>
                 </div>
-            </div>`;
-    }
-
-    // --- FEATURES ---
-    function searchNotes() {
-        const query = document.getElementById('search-input').value.toLowerCase();
-        const list = document.getElementById('notes-list');
-        const cal = document.getElementById('calendar');
-        const title = document.getElementById('selected-date-title');
-
-        if (!query) {
-            cal.style.display = 'grid';
-            list.innerHTML = '';
-            title.innerText = '';
-            return;
-        }
-
-        cal.style.display = 'none';
-        title.innerText = `Search results for "${query}"`;
-        const filtered = getNotes().filter(n => n.content.toLowerCase().includes(query)).sort((a,b) => b.id - a.id);
-        list.innerHTML = filtered.map(n => renderNoteTemplate(n, query)).join('') || '<p>No matches found.</p>';
+            </div>
+        `).join('') || '<p>No notes.</p>';
     }
 
     function renderTagCloud() {
         const cloud = document.getElementById('tag-cloud');
-        const tags = [...new Set(getNotes().flatMap(n => n.tags || []))];
+        const tags = [...new Set(JSON.parse(localStorage.getItem('journal_notes') || '[]').flatMap(n => n.tags || []))];
         cloud.innerHTML = tags.map(t => `<span class="tag" onclick="filterByTag('${t}')">${t}</span>`).join('');
     }
 
     function filterByTag(tag) {
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.tags.includes(tag));
         document.getElementById('calendar').style.display = 'none';
-        document.getElementById('selected-date-title').innerText = `Notes tagged with ${tag}`;
-        const filtered = getNotes().filter(n => n.tags && n.tags.includes(tag)).sort((a,b) => b.id - a.id);
-        document.getElementById('notes-list').innerHTML = filtered.map(n => renderNoteTemplate(n)).join('');
+        document.getElementById('notes-list').innerHTML = `<h3>Tag: ${tag}</h3>` + notes.map(n => `<div>${n.content}</div>`).join('<hr>');
     }
 
-    function editNote(id) {
-        const notes = getNotes();
-        const idx = notes.findIndex(n => n.id === id);
-        const newText = prompt("Update your note:", notes[idx].content);
-        if (newText !== null) {
-            notes[idx].content = newText;
-            notes[idx].tags = (newText.match(/#(\w+)/g) || []).map(t => t.toLowerCase());
-            localStorage.setItem('journal_notes', JSON.stringify(notes));
-            showPage('history-page');
-        }
-    }
-
-    function deleteNote(id) {
-        if (confirm("Permanently delete this note?")) {
-            const notes = getNotes().filter(n => n.id !== id);
-            localStorage.setItem('journal_notes', JSON.stringify(notes));
-            showPage('history-page');
-        }
-    }
-
-    function changeMonth(offset) {
-        currentMonth.setMonth(currentMonth.getMonth() + offset);
-        renderCalendar();
-    }
-
-    // --- STORAGE ---
     function exportNotes() {
-        const blob = new Blob([localStorage.getItem('journal_notes')], { type: 'application/json' });
+        const notes = localStorage.getItem('journal_notes');
+        const blob = new Blob([notes], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `journal-backup-${new Date().toLocaleDateString('en-CA')}.json`;
+        a.download = `journal-${new Date().toLocaleDateString('en-CA')}.json`;
         a.click();
     }
 
     function importNotes(event) {
         const reader = new FileReader();
         reader.onload = (e) => {
-            try {
-                const imported = JSON.parse(e.target.result);
-                const existing = getNotes();
-                const existingIds = new Set(existing.map(n => n.id));
-                const merged = [...existing, ...imported.filter(n => !existingIds.has(n.id))];
-                localStorage.setItem('journal_notes', JSON.stringify(merged));
-                alert('Import successful!');
-                showPage('history-page');
-            } catch (err) { alert('Invalid file format.'); }
+            localStorage.setItem('journal_notes', e.target.result);
+            renderHeatmap(); renderCalendar(); renderTagCloud();
+            alert('Imported!');
         };
         reader.readAsText(event.target.files[0]);
     }
@@ -476,14 +336,23 @@
         localStorage.setItem('dark_mode', isDark);
     }
 
-    // Add this to the very bottom of your <script> tag to run on load
-    (function initTheme() {
-        const savedTheme = localStorage.getItem('dark_mode');
-        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    function deleteNote(id) {
+        if(!confirm('Delete?')) return;
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.id !== id);
+        localStorage.setItem('journal_notes', JSON.stringify(notes));
+        renderHeatmap(); renderCalendar();
+        document.getElementById('notes-list').innerHTML = '';
+    }
 
-        if (savedTheme === 'true' || (savedTheme === null && systemPrefersDark)) {
-            document.body.classList.add('dark-mode');
-        }
+    function changeMonth(dir) {
+        currentMonth.setMonth(currentMonth.getMonth() + dir);
+        renderCalendar();
+    }
+
+    // Init Theme
+    (function() {
+        const saved = localStorage.getItem('dark_mode');
+        if (saved === 'false') document.body.classList.remove('dark-mode');
     })();
 </script>
 
