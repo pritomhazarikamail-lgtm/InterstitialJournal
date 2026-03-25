@@ -9,179 +9,62 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#007aff">
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="icon-192.png">
-
-    <script src="https://esm.run/@mlc-ai/web-llm"></script>
+    <link rel="apple-touch-icon" href="journal_icon.png">
 
     <style>
         :root {
-            --bg: #ffffff;
-            --text: #1a1a1a;
-            --accent: #007aff;
-            --secondary: #f2f2f7;
-            --border: #e5e5ea;
-            --card-bg: #ffffff;
-            --success: #34c759; /* Added this */
-            --danger: #ff3b30;  /* Added this */
+            --bg: #ffffff; --text: #1a1a1a; --accent: #007aff; --secondary: #f2f2f7; --border: #e5e5ea; --card-bg: #ffffff; --success: #34c759; --danger: #ff3b30;
         }
-
         body.dark-mode {
-            --bg: #1c1c1e;
-            --text: #f2f2f7;
-            --accent: #0a84ff;
-            --secondary: #2c2c2e;
-            --border: #3a3a3c;
-            --card-bg: #2c2c2e;
+            --bg: #1c1c1e; --text: #f2f2f7; --accent: #0a84ff; --secondary: #2c2c2e; --border: #3a3a3c; --card-bg: #2c2c2e;
         }
-
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
-            line-height: 1.6;
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            transition: background 0.2s;
+            background-color: var(--bg); color: var(--text); line-height: 1.6; margin: 0; display: flex; justify-content: center; transition: background 0.2s;
         }
-
         .container {
-            width: 100%;
-            max-width: 600px;
-            /* Dynamic padding: min 40px, or safe area for S25 Ultra camera */
+            width: 100%; max-width: 600px;
             padding-top: max(40px, env(safe-area-inset-top));
             padding-bottom: max(40px, env(safe-area-inset-bottom));
-            padding-left: 20px;
-            padding-right: 20px;
-            box-sizing: border-box;
+            padding-left: 20px; padding-right: 20px; box-sizing: border-box;
         }
-
         .theme-toggle {
-            position: fixed;
-            top: max(20px, env(safe-area-inset-top));
-            right: 20px;
-            background: var(--secondary);
-            color: var(--text);
-            padding: 8px;
-            border-radius: 50%;
-            width: 44px;
-            height: 44px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid var(--border);
-            cursor: pointer;
-            z-index: 1000;
+            position: fixed; top: max(20px, env(safe-area-inset-top)); right: 20px;
+            background: var(--secondary); color: var(--text); padding: 8px; border-radius: 50%;
+            width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--border); cursor: pointer; z-index: 1000;
         }
-
         h1, h2, h3 { font-weight: 700; margin-top: 0; }
         .hidden { display: none; }
-
         textarea {
-            width: 100%;
-            height: 160px;
-            padding: 15px;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            font-size: 1rem;
-            resize: none;
-            box-sizing: border-box;
-            outline: none;
-            background: var(--card-bg);
-            color: var(--text);
-            font-family: inherit;
+            width: 100%; height: 160px; padding: 15px; border: 1px solid var(--border); border-radius: 12px;
+            font-size: 1rem; resize: none; box-sizing: border-box; outline: none; background: var(--card-bg); color: var(--text); font-family: inherit;
         }
-
-        .controls {
-            margin-top: 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        button {
-            background-color: var(--accent);
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 10px;
-            cursor: pointer;
-            font-weight: 600;
-        }
-
-        .link-btn {
-            color: var(--accent);
-            text-decoration: none;
-            font-size: 0.95rem;
-            cursor: pointer;
-            font-weight: 500;
-        }
-
-        /* Heatmap Styles */
-        .heatmap-container {
-            margin-bottom: 30px;
-            background: var(--secondary);
-            padding: 15px;
-            border-radius: 12px;
-        }
-        .heatmap-grid {
-            display: grid;
-            grid-template-columns: repeat(22, 1fr);
-            gap: 3px;
-            margin-top: 10px;
-        }
-        .heatmap-cell {
-            aspect-ratio: 1/1;
-            border-radius: 2px;
-            background-color: var(--border);
-        }
-        .lvl-1 { background-color: #9be9a8; }
-        .lvl-2 { background-color: #40c463; }
-        .lvl-3 { background-color: #30a14e; }
-        .lvl-4 { background-color: #216e39; }
-
-        /* Notes History */
+        .controls { margin-top: 15px; display: flex; justify-content: space-between; align-items: center; }
+        button { background-color: var(--accent); color: white; border: none; padding: 12px 20px; border-radius: 10px; cursor: pointer; font-weight: 600; }
+        .link-btn { color: var(--accent); text-decoration: none; font-size: 0.95rem; cursor: pointer; font-weight: 500; }
+        .heatmap-container { margin-bottom: 30px; background: var(--secondary); padding: 15px; border-radius: 12px; }
+        .heatmap-grid { display: grid; grid-template-columns: repeat(22, 1fr); gap: 3px; margin-top: 10px; }
+        .heatmap-cell { aspect-ratio: 1/1; border-radius: 2px; background-color: var(--border); cursor: pointer; }
+        .lvl-1 { background-color: #9be9a8; } .lvl-2 { background-color: #40c463; } .lvl-3 { background-color: #30a14e; } .lvl-4 { background-color: #216e39; }
         .note-item { padding: 15px 0; border-bottom: 1px solid var(--border); }
         .note-meta { font-size: 0.75rem; color: #8e8e93; display: flex; justify-content: space-between; }
         .note-actions { margin-top: 10px; display: flex; gap: 15px; }
         .action-link { font-size: 0.8rem; cursor: pointer; background: none; border: none; font-weight: 500; }
-        .edit-link { color: var(--accent); }
-        .delete-link { color: var(--danger); }
-
-        .storage-footer {
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            gap: 15px;
-        }
-        
+        .edit-link { color: var(--accent); } .delete-link { color: var(--danger); }
+        .storage-footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid var(--border); display: flex; gap: 15px; }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; margin-bottom: 25px; }
         .calendar-day { padding: 10px 0; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
         .has-note { font-weight: bold; color: var(--accent); text-decoration: underline; }
-        
         .tag { background: var(--secondary); padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; cursor: pointer; margin-right: 5px; }
-
-        .duration-badge {
-            display: inline-block;
-            background: var(--accent);
-            color: white;
-            font-size: 0.7rem;
-            padding: 2px 8px;
-            border-radius: 4px;
-            margin-bottom: 8px;
-            font-weight: 600;
-            opacity: 0.8;
-        }
-
-        body.dark-mode .duration-badge {
-            background: var(--secondary);
-            color: var(--accent);
-            border: 1px solid var(--accent);
-        }
+        .duration-badge { display: inline-block; background: var(--accent); color: white; font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; font-weight: 600; opacity: 0.8; }
+        body.dark-mode .duration-badge { background: var(--secondary); color: var(--accent); border: 1px solid var(--accent); }
+        mark { background: #ffcc00; color: black; border-radius: 2px; }
     </style>
 </head>
-<body class="dark-mode"> <div class="container">
+<body class="dark-mode">
+
+<div class="container">
     <button class="theme-toggle" onclick="toggleDarkMode()">🌓</button>
 
     <div id="home-page">
@@ -219,9 +102,9 @@
             <div id="llm-controls" style="margin-top: 20px; padding: 15px; background: var(--secondary); border-radius: 12px; display: none;">
                 <button id="summarize-btn" onclick="generateDailySummary()">✨ Summarize My Day</button>
                 <div id="llm-status" style="font-size: 0.7rem; margin-top: 5px; color: #8e8e93;"></div>
-                <div id="daily-summary-output" style="margin-top: 15px; font-style: italic; font-size: 0.9rem; line-height: 1.5;"></div>
+                <div id="daily-summary-output" style="margin-top: 15px; font-style: italic; font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap;"></div>
             </div>
-            <h3 id="selected-date-title" style="font-size: 1rem; color: #8e8e93;"></h3>
+            <h3 id="selected-date-title" style="font-size: 1rem; color: #8e8e93; margin-top: 20px;"></h3>
             <div id="notes-list"></div>
         </div>
 
@@ -234,36 +117,99 @@
     </div>
 </div>
 
-<script>
+<script type="module">
+    /* -------------------------------------------------------------------------- */
+    /* 1. GLOBAL STATE & CONFIG                                                  */
+    /* -------------------------------------------------------------------------- */
     let currentMonth = new Date();
     const noteInput = document.getElementById('note-input');
+    let engine; 
+    const modelId = "Llama-3.2-1B-Instruct-q4f16_1-MLC"; 
 
+    // Helper: Standardized YYYY-MM-DD for cross-device consistency
+    const getISODate = (date) => {
+        const d = new Date(date);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    /* -------------------------------------------------------------------------- */
+    /* 2. NAVIGATION & THEME                                                     */
+    /* -------------------------------------------------------------------------- */
     function showPage(pageId) {
         document.getElementById('home-page').classList.toggle('hidden', pageId !== 'home-page');
         document.getElementById('history-page').classList.toggle('hidden', pageId !== 'history-page');
         
         if (pageId === 'history-page') {
-            renderHeatmap();
-            renderTagCloud();
-            renderCalendar();
+            renderAll();
+            // Reset view state
             document.getElementById('notes-list').innerHTML = '';
+            document.getElementById('selected-date-title').innerText = '';
+            document.getElementById('search-input').value = '';
+            document.getElementById('calendar').style.display = 'grid';
         }
     }
 
+    function toggleDarkMode() {
+        const isDark = document.body.classList.toggle('dark-mode');
+        localStorage.setItem('dark_mode', isDark);
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /* 3. CORE JOURNAL LOGIC (CRUD)                                              */
+    /* -------------------------------------------------------------------------- */
     function saveNote() {
         const text = noteInput.value.trim();
         if (!text) return;
+
         const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        const now = new Date();
         notes.push({
             id: Date.now(),
-            timestamp: new Date().toISOString(),
+            timestamp: now.toISOString(),
             content: text,
-            dateKey: new Date().toLocaleDateString('en-CA'),
+            dateKey: getISODate(now),
             tags: (text.match(/#(\w+)/g) || []).map(t => t.toLowerCase())
         });
+
         localStorage.setItem('journal_notes', JSON.stringify(notes));
         noteInput.value = '';
-        alert('Saved!');
+        alert('Entry saved!');
+    }
+
+    function deleteNote(id) {
+        if(!confirm('Permanently delete this entry?')) return;
+        let notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        notes = notes.filter(n => n.id !== id);
+        localStorage.setItem('journal_notes', JSON.stringify(notes));
+        
+        // Refresh the current view
+        const currentTitle = document.getElementById('selected-date-title').innerText;
+        if (currentTitle.includes("for ")) {
+            showNotesForDay(currentTitle.split("for ")[1]);
+        }
+        renderAll();
+    }
+
+    function editNote(id) {
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        const idx = notes.findIndex(n => n.id === id);
+        const newText = prompt("Update note content:", notes[idx].content);
+        
+        if (newText !== null && newText.trim() !== "") {
+            notes[idx].content = newText.trim();
+            notes[idx].tags = (newText.match(/#(\w+)/g) || []).map(t => t.toLowerCase());
+            localStorage.setItem('journal_notes', JSON.stringify(notes));
+            showNotesForDay(notes[idx].dateKey);
+        }
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /* 4. RENDERING ENGINE                                                       */
+    /* -------------------------------------------------------------------------- */
+    function renderAll() {
+        renderHeatmap();
+        renderTagCloud();
+        renderCalendar();
     }
 
     function renderHeatmap() {
@@ -272,12 +218,14 @@
         const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
         const counts = notes.reduce((acc, n) => { acc[n.dateKey] = (acc[n.dateKey] || 0) + 1; return acc; }, {});
         const today = new Date();
+
         for (let i = 153; i >= 0; i--) {
             const d = new Date(); d.setDate(today.getDate() - i);
-            const key = d.toLocaleDateString('en-CA');
+            const key = getISODate(d);
             const count = counts[key] || 0;
             const cell = document.createElement('div');
             cell.className = 'heatmap-cell' + (count > 0 ? ` lvl-${Math.min(count, 4)}` : '');
+            cell.title = `${key}: ${count} notes`;
             cell.onclick = () => showNotesForDay(key);
             grid.appendChild(cell);
         }
@@ -293,13 +241,24 @@
         const first = new Date(year, month, 1).getDay();
         const days = new Date(year, month + 1, 0).getDate();
         const noteDates = new Set(JSON.parse(localStorage.getItem('journal_notes') || '[]').map(n => n.dateKey));
+        
+        // Dynamic selection highlighting
+        const viewingDate = document.getElementById('selected-date-title').innerText.split("for ")[1];
 
         for(let i=0; i<first; i++) cal.appendChild(document.createElement('div'));
+        
         for(let d=1; d<=days; d++) {
             const key = `${year}-${String(month+1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
             const el = document.createElement('div');
             el.className = 'calendar-day' + (noteDates.has(key) ? ' has-note' : '');
-            if (new Date().toLocaleDateString('en-CA') === key) el.style.border = '1px solid var(--accent)';
+            
+            if (key === viewingDate) {
+                el.style.backgroundColor = 'var(--accent)';
+                el.style.color = 'white';
+            } else if (getISODate(new Date()) === key) {
+                el.style.border = '2px solid var(--accent)';
+            }
+
             el.innerText = d;
             el.onclick = () => showNotesForDay(key);
             cal.appendChild(el);
@@ -307,130 +266,71 @@
     }
 
     function showNotesForDay(dateKey) {
-    const list = document.getElementById('notes-list');
-    const title = document.getElementById('selected-date-title');
-    const llmControls = document.getElementById('llm-controls');
-    const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-    
-    // 1. Filter and Sort Chronologically (Essential for Duration Delta)
-    const filtered = notes
-        .filter(n => n.dateKey === dateKey)
-        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-    title.innerText = `Notes for ${dateKey}`;
-    
-    // 2. Toggle LLM Controls visibility
-    if (llmControls) {
-        llmControls.style.display = filtered.length > 0 ? 'block' : 'none';
-        // Clear previous summary when switching days
-        document.getElementById('daily-summary-output').innerText = '';
-    }
-
-    // 3. Map with Index to access previous note for Duration calculation
-    list.innerHTML = filtered.length ? filtered.map((n, i) => {
-        let durationHtml = '';
+        const list = document.getElementById('notes-list');
+        const title = document.getElementById('selected-date-title');
+        const llmControls = document.getElementById('llm-controls');
+        const summaryOutput = document.getElementById('daily-summary-output');
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
         
-        if (i > 0) {
-            const prevNote = filtered[i - 1];
-            const diff = new Date(n.timestamp) - new Date(prevNote.timestamp);
-            const duration = formatDuration(diff); // Uses the helper function
-            if (duration) {
-                durationHtml = `<div class="duration-badge">⏱️ Gap: ${duration}</div>`;
-            }
+        const filtered = notes
+            .filter(n => n.dateKey === dateKey)
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+        title.innerText = `Notes for ${dateKey}`;
+        
+        if (llmControls) {
+            llmControls.style.display = filtered.length > 0 ? 'block' : 'none';
+            summaryOutput.innerText = ''; 
         }
 
-        return `
-            <div class="note-item" id="note-${n.id}">
-                ${durationHtml}
-                <div class="note-meta">
-                    <span>${new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                </div>
-                <div class="note-text">${n.content.replace(/\n/g, '<br>')}</div>
-                <div class="note-actions">
-                    <button class="action-link edit-link" onclick="editNote(${n.id})">Edit</button>
-                    <button class="action-link delete-link" onclick="deleteNote(${n.id})">Delete</button>
-                </div>
-            </div>`;
-    }).join('') : '<p style="color: #8e8e93;">No entries for this date.</p>';
-}
+        list.innerHTML = filtered.length ? filtered.map((n, i) => {
+            let durationHtml = '';
+            if (i > 0) {
+                const diff = new Date(n.timestamp) - new Date(filtered[i - 1].timestamp);
+                const duration = formatDuration(diff);
+                if (duration) durationHtml = `<div class="duration-badge">⏱️ Gap: ${duration}</div>`;
+            }
 
-    function renderTagCloud() {
-        const cloud = document.getElementById('tag-cloud');
-        const tags = [...new Set(JSON.parse(localStorage.getItem('journal_notes') || '[]').flatMap(n => n.tags || []))];
-        cloud.innerHTML = tags.map(t => `<span class="tag" onclick="filterByTag('${t}')">${t}</span>`).join('');
+            return `
+                <div class="note-item" id="note-${n.id}">
+                    ${durationHtml}
+                    <div class="note-meta">
+                        <span>${new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                    </div>
+                    <div class="note-text">${n.content.replace(/\n/g, '<br>')}</div>
+                    <div class="note-actions">
+                        <button class="action-link edit-link" onclick="window.editNote(${n.id})">Edit</button> 
+                        <button class="action-link delete-link" onclick="window.deleteNote(${n.id})">Delete</button>
+                    </div>
+                </div>`;
+        }).join('') : '<p style="color: #8e8e93;">No entries for this date.</p>';
+        
+        renderCalendar(); // Forces refresh to update selection color
+        title.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    function filterByTag(tag) {
-        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.tags.includes(tag));
-        document.getElementById('calendar').style.display = 'none';
-        document.getElementById('notes-list').innerHTML = `<h3>Tag: ${tag}</h3>` + notes.map(n => `<div>${n.content}</div>`).join('<hr>');
-    }
-
-    function exportNotes() {
-        const notes = localStorage.getItem('journal_notes');
-        const blob = new Blob([notes], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `journal-${new Date().toLocaleDateString('en-CA')}.json`;
-        a.click();
-    }
-
-    function importNotes(event) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            localStorage.setItem('journal_notes', e.target.result);
-            renderHeatmap(); renderCalendar(); renderTagCloud();
-            alert('Imported!');
-        };
-        reader.readAsText(event.target.files[0]);
-    }
-
-    function toggleDarkMode() {
-        const isDark = document.body.classList.toggle('dark-mode');
-        localStorage.setItem('dark_mode', isDark);
-    }
-
-    function deleteNote(id) {
-        if(!confirm('Delete?')) return;
-        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.id !== id);
-        localStorage.setItem('journal_notes', JSON.stringify(notes));
-        renderHeatmap(); renderCalendar();
-        document.getElementById('notes-list').innerHTML = '';
-    }
-
-    function changeMonth(dir) {
-        currentMonth.setMonth(currentMonth.getMonth() + dir);
-        renderCalendar();
-    }
-
-    function formatDuration(ms) {
-        if (ms < 0) return null;
-        const mins = Math.floor(ms / 60000);
-        if (mins < 1) return "< 1m";
-        if (mins < 60) return `${mins}m`;
-        const h = Math.floor(mins / 60);
-        const m = mins % 60;
-        return m > 0 ? `${h}h ${m}m` : `${h}h`;
-    }
-
-    let engine;
-    const modelId = "SmolLM-135M-Instruct-v0.2-q4f16_1-MLC"; // Tiny & Fast
-
+    /* -------------------------------------------------------------------------- */
+    /* 5. LOCAL AI & SEARCH                                                      */
+    /* -------------------------------------------------------------------------- */
     async function initLLM() {
         const status = document.getElementById('llm-status');
         if (engine) return;
 
         try {
-            status.innerText = "Initializing WebGPU & Downloading Model (this may take a minute)...";
-            engine = await webllm.CreateMLCEngine(modelId, {
-                initProgressCallback: (report) => {
-                    status.innerText = report.text;
-                }
+            status.innerText = "Connecting to local GPU...";
+            // Dynamic import for non-blocking performance
+            const webllm = await import("https://esm.run/@mlc-ai/web-llm");
+            
+            if (!navigator.gpu) throw new Error("WebGPU Not Supported");
+
+            status.innerText = "Initializing Llama 3.2...";
+            engine = await webllm.CreateMLCEngine(modelId, { 
+                initProgressCallback: (report) => status.innerText = report.text 
             });
-            status.innerText = "Local LLM Ready (SmolLM)";
+            status.innerText = "Local LLM Ready";
         } catch (e) {
-            status.innerText = "Error: WebGPU not supported or initialization failed.";
-            console.error(e);
+            status.innerText = "Error: " + e.message;
+            throw e;
         }
     }
 
@@ -438,39 +338,95 @@
         const list = document.getElementById('notes-list');
         const output = document.getElementById('daily-summary-output');
         const btn = document.getElementById('summarize-btn');
-        
-        // Extract text from the current day's notes
-        const noteTexts = Array.from(list.querySelectorAll('.note-text'))
-                            .map(el => el.innerText)
-                            .join("\n- ");
+        const noteTexts = Array.from(list.querySelectorAll('.note-text')).map(el => el.innerText).join("\n- ");
 
-        if (!noteTexts) return alert("No notes to summarize!");
-
-        await initLLM();
-        
-        btn.disabled = true;
-        output.innerText = "Thinking...";
-
-        const messages = [
-            { role: "system", content: "You are a productivity assistant. Summarize the user's work logs for the day into three concise bullet points." },
-            { role: "user", content: `Here are my logs for today:\n- ${noteTexts}` }
-        ];
-
-        const reply = await engine.chat.completions.create({ messages });
-        output.innerText = reply.choices[0].message.content;
-        btn.disabled = false;
+        try {
+            await initLLM();
+            btn.disabled = true;
+            output.innerText = "Generating summary...";
+            const messages = [
+                { role: "system", content: "Summarize the logs into a brief standup format (Done/Progress/Blockers)." },
+                { role: "user", content: noteTexts }
+            ];
+            const reply = await engine.chat.completions.create({ messages });
+            output.innerText = reply.choices[0].message.content;
+        } catch (err) { console.error(err); } finally { btn.disabled = false; }
     }
 
-    // Update showNotesForDay to show the LLM controls
-    // Add this line inside showNotesForDay:
-    // document.getElementById('llm-controls').style.display = filtered.length > 0 ? 'block' : 'none';
+    function searchNotes() {
+        const query = document.getElementById('search-input').value.toLowerCase();
+        const list = document.getElementById('notes-list');
+        const cal = document.getElementById('calendar');
+        const title = document.getElementById('selected-date-title');
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
 
-    // Init Theme
-    (function() {
+        if (!query) {
+            cal.style.display = 'grid'; list.innerHTML = ''; title.innerText = '';
+            return;
+        }
+
+        cal.style.display = 'none';
+        title.innerText = `Search: "${query}"`;
+        const filtered = notes.filter(n => n.content.toLowerCase().includes(query)).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        list.innerHTML = filtered.map(n => `
+            <div class="note-item">
+                <small>${n.dateKey}</small>
+                <div class="note-text">${n.content.replace(new RegExp(query, 'gi'), m => `<mark>${m}</mark>`)}</div>
+            </div>`).join('') || '<p>No matches found.</p>';
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /* 6. STORAGE & HELPERS                                                      */
+    /* -------------------------------------------------------------------------- */
+    function formatDuration(ms) {
+        const mins = Math.floor(ms / 60000);
+        if (mins < 1) return null;
+        return mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+    }
+
+    function renderTagCloud() {
+        const cloud = document.getElementById('tag-cloud');
+        const tags = [...new Set(JSON.parse(localStorage.getItem('journal_notes') || '[]').flatMap(n => n.tags || []))];
+        cloud.innerHTML = tags.map(t => `<span class="tag" onclick="window.filterByTag('${t}')">${t}</span>`).join('');
+    }
+
+    function filterByTag(tag) {
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.tags.includes(tag));
+        document.getElementById('calendar').style.display = 'none';
+        document.getElementById('selected-date-title').innerText = `Tag: #${tag}`;
+        document.getElementById('notes-list').innerHTML = notes.map(n => `
+            <div class="note-item">
+                <small>${n.dateKey}</small>
+                <div class="note-text">${n.content}</div>
+            </div>`).join('');
+    }
+
+    function changeMonth(dir) { currentMonth.setMonth(currentMonth.getMonth() + dir); renderCalendar(); }
+    
+    function exportNotes() {
+        const blob = new Blob([localStorage.getItem('journal_notes')], { type: 'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'journal.json'; a.click();
+    }
+    
+    function importNotes(event) {
+        const reader = new FileReader();
+        reader.onload = (e) => { localStorage.setItem('journal_notes', e.target.result); renderAll(); alert('Imported!'); };
+        reader.readAsText(event.target.files[0]);
+    }
+
+    // 7. WINDOW BINDINGS (Essential for onclick support in modules)
+    Object.assign(window, {
+        showPage, toggleDarkMode, saveNote, deleteNote, editNote, generateDailySummary,
+        changeMonth, exportNotes, importNotes, filterByTag, showNotesForDay, searchNotes
+    });
+
+    // 8. INITIALIZATION
+    (function init() {
         const saved = localStorage.getItem('dark_mode');
         if (saved === 'false') document.body.classList.remove('dark-mode');
+        if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
     })();
 </script>
-
 </body>
 </html>
