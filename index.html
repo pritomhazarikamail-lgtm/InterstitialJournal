@@ -175,15 +175,54 @@
         background: var(--secondary);
         transform: scale(0.98); /* Feedback when tapped */
     }
+
+    button.primary-btn {
+        width: 100%;
+        padding: 16px;
+        border-radius: 14px;
+        font-size: 1rem;
+        border: 1px solid transparent; /* Height insurance */
+        background: var(--accent);
+        color: white;
+        font-weight: 700;
+        cursor: pointer;
+        box-sizing: border-box; /* Ensures padding/border don't grow the button */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.2s, transform 0.1s;
+    }
+
+    button.primary-btn:active {
+        transform: scale(0.98);
+    }
     </style>
 </head>
 <body class="dark-mode">
 
 <div class="container">
     <div id="home-page">
+        <div id="time-blindness-nudge" style="text-align: center; font-size: 0.8rem; opacity: 0.7; margin-bottom: 15px; font-weight: 600;"></div>
+            <div id="focus-section" class="hidden" style="margin-bottom: 30px;">
+                <div class="note-item" style="border: 2px solid var(--accent); box-shadow: 0 0 20px rgba(0,122,255,0.15); border-left: 6px solid var(--accent);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <small style="color: var(--accent); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05rem;">Current Focus</small>
+                        <span class="duration-badge" id="focus-timer" style="margin: 0;">0m</span>
+                    </div>
+                    <div id="focus-text" style="font-size: 1.1rem; font-weight: 500; margin-bottom: 15px;"></div>
+                    <button class="action-link edit-link" style="font-size: 0.9rem;" onclick="window.completeFocus()">✅ Mark as Finished</button>
+                </div>
+            </div>
         <h1 style="margin-bottom: 25px;">How's it going?</h1>
         <textarea id="note-input" placeholder="Start typing... use #tags for projects"></textarea>
-        <button class="primary-btn" onclick="saveNote()">Save Memory</button>
+        <div style="display: flex; gap: 12px; width: 100%;">
+            <button class="primary-btn" onclick="saveNote()" style="flex: 1;">
+                💾 Save Note
+            </button>
+            <button class="primary-btn" onclick="startFocus()" style="flex: 1; background: var(--secondary); color: var(--accent); border-color: var(--accent);">
+                🎯 Focus
+            </button>
+        </div>
     </div>
 
     <div id="history-page" class="hidden">
@@ -242,21 +281,96 @@
 </div>
 
 <script type="module">
+    /* -------------------------------------------------------------------------- */
+    /* 1. GLOBAL STATE & ADHD CONFIG                                              */
+    /* -------------------------------------------------------------------------- */
     let currentMonth = new Date();
     const noteInput = document.getElementById('note-input');
-    let engine;
+    let engine; 
     const modelId = "Llama-3.2-1B-Instruct-q4f16_1-MLC"; 
 
+    // Helper: Standardized YYYY-MM-DD for cross-device consistency
     const getISODate = (date) => {
         const d = new Date(date);
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
 
+    /* -------------------------------------------------------------------------- */
+    /* 2. ADHD FEATURES: FOCUS & TIME TRACKING                                    */
+    /* -------------------------------------------------------------------------- */
+    
+    // Updates the "Time since last entry" nudge and the focus timer
+    function updateLiveTimer() {
+        const nudge = document.getElementById('time-blindness-nudge');
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        
+        if (notes.length === 0) {
+            nudge.innerText = "Ready to start? Log your first entry.";
+            return;
+        }
+
+        // Calculate time since last log to break time blindness
+        const lastNote = notes.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+        const diff = new Date() - new Date(lastNote.timestamp);
+        const mins = Math.floor(diff / 60000);
+
+        if (mins < 1) nudge.innerText = "✨ Just logged a moment.";
+        else if (mins < 60) nudge.innerText = `⏳ ${mins}m since your last entry.`;
+        else nudge.innerText = `⚠️ ${Math.floor(mins/60)}h ${mins%60}m since your last entry.`;
+
+        // Update the Sticky Focus timer if one is active
+        const focusStart = localStorage.getItem('focus_start_time');
+        if (focusStart) {
+            const fDiff = new Date() - new Date(focusStart);
+            const fMins = Math.floor(fDiff / 60000);
+            const timerEl = document.getElementById('focus-timer');
+            if (timerEl) timerEl.innerText = `${fMins}m`;
+        }
+    }
+
+    // Displays or hides the Sticky Focus card based on storage
+    function renderFocus() {
+        const focusText = localStorage.getItem('current_focus');
+        const section = document.getElementById('focus-section');
+        if (focusText) {
+            section.classList.remove('hidden');
+            document.getElementById('focus-text').innerText = focusText;
+        } else {
+            section.classList.add('hidden');
+        }
+    }
+
+    function startFocus() {
+        const text = noteInput.value.trim();
+        if (!text) return alert("What are you focusing on?");
+        
+        localStorage.setItem('current_focus', text);
+        localStorage.setItem('focus_start_time', new Date().toISOString());
+        noteInput.value = '';
+        renderFocus();
+        updateLiveTimer();
+    }
+
+    function completeFocus() {
+        const text = localStorage.getItem('current_focus');
+        const start = localStorage.getItem('focus_start_time');
+        const duration = Math.floor((new Date() - new Date(start)) / 60000);
+        
+        // Automatically save the completed task to your history
+        saveNote(`✅ Focus Completed: ${text} (#focus for ${duration}m)`);
+        
+        localStorage.removeItem('current_focus');
+        localStorage.removeItem('focus_start_time');
+        renderFocus();
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /* 3. NAVIGATION & UI                                                         */
+    /* -------------------------------------------------------------------------- */
     function showPage(pageId) {
         document.getElementById('home-page').classList.toggle('hidden', pageId !== 'home-page');
         document.getElementById('history-page').classList.toggle('hidden', pageId !== 'history-page');
         
-        // Update Nav UI
         document.getElementById('nav-write').classList.toggle('active', pageId === 'home-page');
         document.getElementById('nav-history').classList.toggle('active', pageId === 'history-page');
 
@@ -272,17 +386,17 @@
     function toggleDarkMode() {
         const isDark = document.body.classList.toggle('dark-mode');
         localStorage.setItem('dark_mode', isDark);
-        
-        // Update the icon in the bottom nav based on current state
         const icon = document.getElementById('theme-icon');
-        if (icon) {
-            icon.innerText = isDark ? '🌙' : '☀️';
-        }
+        if (icon) icon.innerText = isDark ? '🌙' : '☀️';
     }
 
-    function saveNote() {
-        const text = noteInput.value.trim();
+    /* -------------------------------------------------------------------------- */
+    /* 4. CORE JOURNAL LOGIC (CRUD)                                               */
+    /* -------------------------------------------------------------------------- */
+    function saveNote(manualText = null) {
+        const text = manualText || noteInput.value.trim();
         if (!text) return;
+
         const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
         const now = new Date();
         notes.push({
@@ -292,11 +406,35 @@
             dateKey: getISODate(now),
             tags: (text.match(/#(\w+)/g) || []).map(t => t.toLowerCase())
         });
+
         localStorage.setItem('journal_notes', JSON.stringify(notes));
-        noteInput.value = '';
-        alert('Saved successfully!');
+        if (!manualText) noteInput.value = '';
+        updateLiveTimer();
+        if (!manualText) alert('Memory saved!');
     }
 
+    function deleteNote(id) {
+        if(!confirm('Delete this permanently?')) return;
+        let notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.id !== id);
+        localStorage.setItem('journal_notes', JSON.stringify(notes));
+        renderAll();
+        document.getElementById('notes-list').innerHTML = '';
+    }
+
+    function editNote(id) {
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        const idx = notes.findIndex(n => n.id === id);
+        const newText = prompt("Update your note:", notes[idx].content);
+        if (newText) {
+            notes[idx].content = newText;
+            localStorage.setItem('journal_notes', JSON.stringify(notes));
+            showNotesForDay(notes[idx].dateKey);
+        }
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /* 5. RENDERING (CALENDAR & HEATMAP)                                          */
+    /* -------------------------------------------------------------------------- */
     function renderAll() {
         renderHeatmap();
         renderTagCloud();
@@ -315,7 +453,6 @@
             const count = counts[key] || 0;
             const cell = document.createElement('div');
             cell.className = 'heatmap-cell' + (count > 0 ? ` lvl-${Math.min(count, 4)}` : '');
-            cell.title = `${key}: ${count} notes`;
             cell.onclick = () => showNotesForDay(key);
             grid.appendChild(cell);
         }
@@ -356,7 +493,6 @@
         const list = document.getElementById('notes-list');
         const title = document.getElementById('selected-date-title');
         const llmControls = document.getElementById('llm-controls');
-        const summaryOutput = document.getElementById('daily-summary-output');
         const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
         
         const filtered = notes
@@ -364,10 +500,7 @@
             .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
         title.innerText = `Notes for ${dateKey}`;
-        if (llmControls) {
-            llmControls.style.display = filtered.length > 0 ? 'block' : 'none';
-            summaryOutput.innerText = ''; 
-        }
+        if (llmControls) llmControls.style.display = filtered.length > 0 ? 'block' : 'none';
 
         list.innerHTML = filtered.length ? filtered.map((n, i) => {
             let durationHtml = '';
@@ -378,7 +511,7 @@
             }
 
             return `
-                <div class="note-item" id="note-${n.id}">
+                <div class="note-item">
                     ${durationHtml}
                     <div class="note-meta">
                         <span>${new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
@@ -389,24 +522,26 @@
                         <button class="action-link delete-link" onclick="window.deleteNote(${n.id})">Delete</button>
                     </div>
                 </div>`;
-        }).join('') : '<p style="color: #8e8e93; text-align:center; padding: 40px 0;">No memories found for this day.</p>';
+        }).join('') : '<p style="color: #8e8e93; text-align:center; padding: 40px 0;">No entries found.</p>';
         
         renderCalendar();
         title.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    /* -------------------------------------------------------------------------- */
+    /* 6. AI & SEARCH                                                             */
+    /* -------------------------------------------------------------------------- */
     async function initLLM() {
         const status = document.getElementById('llm-status');
         if (engine) return;
         try {
-            status.innerText = "Connecting to local AI engine...";
+            status.innerText = "Connecting to local AI...";
             const webllm = await import("https://esm.run/@mlc-ai/web-llm");
             if (!navigator.gpu) throw new Error("WebGPU Not Supported");
             engine = await webllm.CreateMLCEngine(modelId, { initProgressCallback: (report) => status.innerText = report.text });
             status.innerText = "AI Coach Ready";
         } catch (e) {
             status.innerText = "AI Unavailable: " + e.message;
-            throw e;
         }
     }
 
@@ -418,10 +553,10 @@
         try {
             await initLLM();
             btn.disabled = true;
-            output.innerText = "Synthesizing your day...";
+            output.innerText = "Reflecting on your day...";
             const messages = [
-                { role: "system", content: "You are a warm, encouraging life coach. Summarize the user's day by highlighting their wins, things they were grateful for, and a small positive takeaway for tomorrow." },
-                { role: "user", content: `Logs:\n- ${noteTexts}` }
+                { role: "system", content: "You are a warm, encouraging life coach. Summarize the user's day by highlighting their wins, efforts made, and providing positive reinforcement to reduce end-of-day anxiety." },
+                { role: "user", content: `My day so far:\n- ${noteTexts}` }
             ];
             const reply = await engine.chat.completions.create({ messages });
             output.innerText = reply.choices[0].message.content;
@@ -435,22 +570,16 @@
         const title = document.getElementById('selected-date-title');
         const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
 
-        if (!query) {
-            cal.style.display = 'grid'; list.innerHTML = ''; title.innerText = '';
-            return;
-        }
-
+        if (!query) { cal.style.display = 'grid'; list.innerHTML = ''; title.innerText = ''; return; }
         cal.style.display = 'none';
         title.innerText = `Search results for "${query}"`;
         const filtered = notes.filter(n => n.content.toLowerCase().includes(query)).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-        
-        list.innerHTML = filtered.map(n => `
-            <div class="note-item">
-                <small style="opacity: 0.5;">${n.dateKey}</small>
-                <div class="note-text" style="margin-top: 10px;">${n.content.replace(new RegExp(query, 'gi'), m => `<mark>${m}</mark>`)}</div>
-            </div>`).join('') || '<p style="text-align:center; padding: 40px 0;">No matches found.</p>';
+        list.innerHTML = filtered.map(n => `<div class="note-item"><small>${n.dateKey}</small><div class="note-text">${n.content.replace(new RegExp(query, 'gi'), m => `<mark>${m}</mark>`)}</div></div>`).join('');
     }
 
+    /* -------------------------------------------------------------------------- */
+    /* 7. HELPERS & EXPORTS                                                       */
+    /* -------------------------------------------------------------------------- */
     function formatDuration(ms) {
         const mins = Math.floor(ms / 60000);
         if (mins < 1) return null;
@@ -467,63 +596,43 @@
         const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.tags.includes(tag));
         document.getElementById('calendar').style.display = 'none';
         document.getElementById('selected-date-title').innerText = `Tag: #${tag}`;
-        document.getElementById('notes-list').innerHTML = notes.map(n => `
-            <div class="note-item">
-                <small style="opacity: 0.5;">${n.dateKey}</small>
-                <div class="note-text" style="margin-top: 10px;">${n.content}</div>
-            </div>`).join('');
-    }
-
-    function deleteNote(id) {
-        if(!confirm('Delete this memory permanently?')) return;
-        let notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.id !== id);
-        localStorage.setItem('journal_notes', JSON.stringify(notes));
-        renderAll();
-        document.getElementById('notes-list').innerHTML = '';
-    }
-
-    function editNote(id) {
-        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        const idx = notes.findIndex(n => n.id === id);
-        const newText = prompt("Update your note:", notes[idx].content);
-        if (newText) {
-            notes[idx].content = newText;
-            localStorage.setItem('journal_notes', JSON.stringify(notes));
-            showNotesForDay(notes[idx].dateKey);
-        }
+        document.getElementById('notes-list').innerHTML = notes.map(n => `<div class="note-item"><small>${n.dateKey}</small><div>${n.content}</div></div>`).join('');
     }
 
     function changeMonth(dir) { currentMonth.setMonth(currentMonth.getMonth() + dir); renderCalendar(); }
+    
     function exportNotes() {
         const blob = new Blob([localStorage.getItem('journal_notes')], { type: 'application/json' });
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'journal-backup.json'; a.click();
     }
+    
     function importNotes(event) {
         const reader = new FileReader();
-        reader.onload = (e) => { localStorage.setItem('journal_notes', e.target.result); renderAll(); alert('Journal restored!'); };
+        reader.onload = (e) => { localStorage.setItem('journal_notes', e.target.result); renderAll(); alert('Imported!'); };
         reader.readAsText(event.target.files[0]);
     }
 
+    // EXPOSE TO WINDOW FOR HTML BUTTONS
     Object.assign(window, {
         showPage, toggleDarkMode, saveNote, deleteNote, editNote, generateDailySummary,
-        changeMonth, exportNotes, importNotes, filterByTag, showNotesForDay, searchNotes
+        changeMonth, exportNotes, importNotes, filterByTag, showNotesForDay, searchNotes,
+        startFocus, completeFocus
     });
 
+    // INITIALIZE ADHD ENGINE
     (function init() {
-    const saved = localStorage.getItem('dark_mode');
-    const icon = document.getElementById('theme-icon');
-    
-    if (saved === 'false') {
-        document.body.classList.remove('dark-mode');
-        if (icon) icon.innerText = '☀️';
-    } else {
-        if (icon) icon.innerText = '🌙';
-    }
-    
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js').catch(() => {});
-    }
-})();
+        renderFocus();
+        updateLiveTimer();
+        setInterval(updateLiveTimer, 30000); // Pulse every 30s to fight time blindness
+
+        const saved = localStorage.getItem('dark_mode');
+        const icon = document.getElementById('theme-icon');
+        if (saved === 'false') {
+            document.body.classList.remove('dark-mode');
+            if (icon) icon.innerText = '☀️';
+        }
+        if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+    })();
 </script>
 </body>
 </html>
