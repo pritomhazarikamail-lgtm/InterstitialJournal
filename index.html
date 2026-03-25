@@ -11,6 +11,8 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
 
+    <script src="https://esm.run/@mlc-ai/web-llm"></script>
+
     <style>
         :root {
             --bg: #ffffff;
@@ -159,6 +161,24 @@
         .has-note { font-weight: bold; color: var(--accent); text-decoration: underline; }
         
         .tag { background: var(--secondary); padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; cursor: pointer; margin-right: 5px; }
+
+        .duration-badge {
+            display: inline-block;
+            background: var(--accent);
+            color: white;
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            font-weight: 600;
+            opacity: 0.8;
+        }
+
+        body.dark-mode .duration-badge {
+            background: var(--secondary);
+            color: var(--accent);
+            border: 1px solid var(--accent);
+        }
     </style>
 </head>
 <body class="dark-mode"> <div class="container">
@@ -196,6 +216,11 @@
         <div id="calendar" class="calendar-grid"></div>
 
         <div id="day-notes">
+            <div id="llm-controls" style="margin-top: 20px; padding: 15px; background: var(--secondary); border-radius: 12px; display: none;">
+                <button id="summarize-btn" onclick="generateDailySummary()">✨ Summarize My Day</button>
+                <div id="llm-status" style="font-size: 0.7rem; margin-top: 5px; color: #8e8e93;"></div>
+                <div id="daily-summary-output" style="margin-top: 15px; font-style: italic; font-size: 0.9rem; line-height: 1.5;"></div>
+            </div>
             <h3 id="selected-date-title" style="font-size: 1rem; color: #8e8e93;"></h3>
             <div id="notes-list"></div>
         </div>
@@ -282,23 +307,52 @@
     }
 
     function showNotesForDay(dateKey) {
-        const list = document.getElementById('notes-list');
-        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        const filtered = notes.filter(n => n.dateKey === dateKey);
-        document.getElementById('selected-date-title').innerText = `Notes for ${dateKey}`;
-        list.innerHTML = filtered.map(n => `
-            <div class="note-item">
+    const list = document.getElementById('notes-list');
+    const title = document.getElementById('selected-date-title');
+    const llmControls = document.getElementById('llm-controls');
+    const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+    
+    // 1. Filter and Sort Chronologically (Essential for Duration Delta)
+    const filtered = notes
+        .filter(n => n.dateKey === dateKey)
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    title.innerText = `Notes for ${dateKey}`;
+    
+    // 2. Toggle LLM Controls visibility
+    if (llmControls) {
+        llmControls.style.display = filtered.length > 0 ? 'block' : 'none';
+        // Clear previous summary when switching days
+        document.getElementById('daily-summary-output').innerText = '';
+    }
+
+    // 3. Map with Index to access previous note for Duration calculation
+    list.innerHTML = filtered.length ? filtered.map((n, i) => {
+        let durationHtml = '';
+        
+        if (i > 0) {
+            const prevNote = filtered[i - 1];
+            const diff = new Date(n.timestamp) - new Date(prevNote.timestamp);
+            const duration = formatDuration(diff); // Uses the helper function
+            if (duration) {
+                durationHtml = `<div class="duration-badge">⏱️ Gap: ${duration}</div>`;
+            }
+        }
+
+        return `
+            <div class="note-item" id="note-${n.id}">
+                ${durationHtml}
                 <div class="note-meta">
                     <span>${new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                 </div>
-                <div>${n.content}</div>
+                <div class="note-text">${n.content.replace(/\n/g, '<br>')}</div>
                 <div class="note-actions">
                     <button class="action-link edit-link" onclick="editNote(${n.id})">Edit</button>
                     <button class="action-link delete-link" onclick="deleteNote(${n.id})">Delete</button>
                 </div>
-            </div>
-        `).join('') || '<p>No notes.</p>';
-    }
+            </div>`;
+    }).join('') : '<p style="color: #8e8e93;">No entries for this date.</p>';
+}
 
     function renderTagCloud() {
         const cloud = document.getElementById('tag-cloud');
@@ -348,6 +402,68 @@
         currentMonth.setMonth(currentMonth.getMonth() + dir);
         renderCalendar();
     }
+
+    function formatDuration(ms) {
+        if (ms < 0) return null;
+        const mins = Math.floor(ms / 60000);
+        if (mins < 1) return "< 1m";
+        if (mins < 60) return `${mins}m`;
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    }
+
+    let engine;
+    const modelId = "SmolLM-135M-Instruct-v0.2-q4f16_1-MLC"; // Tiny & Fast
+
+    async function initLLM() {
+        const status = document.getElementById('llm-status');
+        if (engine) return;
+
+        try {
+            status.innerText = "Initializing WebGPU & Downloading Model (this may take a minute)...";
+            engine = await webllm.CreateMLCEngine(modelId, {
+                initProgressCallback: (report) => {
+                    status.innerText = report.text;
+                }
+            });
+            status.innerText = "Local LLM Ready (SmolLM)";
+        } catch (e) {
+            status.innerText = "Error: WebGPU not supported or initialization failed.";
+            console.error(e);
+        }
+    }
+
+    async function generateDailySummary() {
+        const list = document.getElementById('notes-list');
+        const output = document.getElementById('daily-summary-output');
+        const btn = document.getElementById('summarize-btn');
+        
+        // Extract text from the current day's notes
+        const noteTexts = Array.from(list.querySelectorAll('.note-text'))
+                            .map(el => el.innerText)
+                            .join("\n- ");
+
+        if (!noteTexts) return alert("No notes to summarize!");
+
+        await initLLM();
+        
+        btn.disabled = true;
+        output.innerText = "Thinking...";
+
+        const messages = [
+            { role: "system", content: "You are a productivity assistant. Summarize the user's work logs for the day into three concise bullet points." },
+            { role: "user", content: `Here are my logs for today:\n- ${noteTexts}` }
+        ];
+
+        const reply = await engine.chat.completions.create({ messages });
+        output.innerText = reply.choices[0].message.content;
+        btn.disabled = false;
+    }
+
+    // Update showNotesForDay to show the LLM controls
+    // Add this line inside showNotesForDay:
+    // document.getElementById('llm-controls').style.display = filtered.length > 0 ? 'block' : 'none';
 
     // Init Theme
     (function() {
