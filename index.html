@@ -138,13 +138,31 @@
             cursor: pointer;
         }
 
-        .heatmap-container { margin-bottom: 25px; background: var(--card-bg); padding: 15px; border-radius: 18px; border: 1px solid var(--border); }
-        .heatmap-grid { display: grid; grid-template-columns: repeat(22, 1fr); gap: 4px; margin-top: 10px; }
         .heatmap-cell { aspect-ratio: 1/1; border-radius: 3px; background-color: var(--border); cursor: pointer; }
         .lvl-1 { background-color: #9be9a8; } .lvl-2 { background-color: #40c463; } .lvl-3 { background-color: #30a14e; } .lvl-4 { background-color: #216e39; }
 
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 25px; }
-        .calendar-day { padding: 12px 0; border-radius: 12px; cursor: pointer; text-align: center; font-size: 0.9rem; }
+        .calendar-day {
+            padding: 12px 0;
+            border-radius: 10px;
+            cursor: pointer;
+            text-align: center;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+
+        /* Density Levels based on your --accent blue */
+        .calendar-day.lvl-1 { background-color: rgba(0, 122, 255, 0.15); color: var(--text); }
+        .calendar-day.lvl-2 { background-color: rgba(0, 122, 255, 0.35); color: var(--text); }
+        .calendar-day.lvl-3 { background-color: rgba(0, 122, 255, 0.65); color: white; }
+        .calendar-day.lvl-4 { background-color: rgba(0, 122, 255, 0.95); color: white; }
+
+        .calendar-day:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-color: var(--accent);
+        }
         .has-note { font-weight: 800; color: var(--accent); background: rgba(0,122,255,0.05); }
 
         .hidden { display: none; }
@@ -264,11 +282,6 @@
             </div>
         </div>
 
-        <div class="heatmap-container">
-            <small style="opacity: 0.5; font-weight: 700; letter-spacing: 0.05rem;">ACTIVITY</small>
-            <div id="heatmap-grid" class="heatmap-grid"></div>
-        </div>
-
         <div id="tag-cloud" style="margin-bottom: 25px; display: flex; flex-wrap: wrap; gap: 8px;"></div>
 
         <input type="text" id="search-input" placeholder="Search your thoughts..." oninput="searchNotes()" 
@@ -342,7 +355,6 @@
             msg.innerText = "🌟 Dopamine Hit! 3 in a row. You're doing great!";
             msg.classList.remove('hidden');
             document.getElementById('focus-section').classList.add('celebrate');
-            // Reset streak after celebration (optional, or keep it going)
             setTimeout(() => {
                 localStorage.setItem('focus_streak', '0');
                 msg.classList.add('hidden');
@@ -405,7 +417,6 @@
         
         saveNote(`✅ Focus Completed: ${text} (#focus for ${duration}m)`);
         
-        // Increment Streak
         let streak = parseInt(localStorage.getItem('focus_streak') || '0');
         localStorage.setItem('focus_streak', (streak + 1).toString());
         
@@ -426,9 +437,9 @@
         document.getElementById('nav-history').classList.toggle('active', pageId === 'history-page');
 
         if (pageId === 'history-page') {
-            renderAll();
             document.getElementById('notes-list').innerHTML = '';
             document.getElementById('selected-date-title').innerText = '';
+            renderAll(); // Called after clearing titles to ensure calendar renders clean
         }
     }
 
@@ -480,29 +491,12 @@
     }
 
     /* -------------------------------------------------------------------------- */
-    /* 5. RENDERING & AI                                                          */
+    /* 5. RENDERING & AI (Calendar Heatmap Unified)                               */
     /* -------------------------------------------------------------------------- */
     function renderAll() {
-        renderHeatmap();
+        // renderHeatmap() is removed because the heatmap is now overlaid on the calendar
         renderTagCloud();
         renderCalendar();
-    }
-
-    function renderHeatmap() {
-        const grid = document.getElementById('heatmap-grid');
-        grid.innerHTML = '';
-        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        const counts = notes.reduce((acc, n) => { acc[n.dateKey] = (acc[n.dateKey] || 0) + 1; return acc; }, {});
-        const today = new Date();
-        for (let i = 153; i >= 0; i--) {
-            const d = new Date(); d.setDate(today.getDate() - i);
-            const key = getISODate(d);
-            const count = counts[key] || 0;
-            const cell = document.createElement('div');
-            cell.className = 'heatmap-cell' + (count > 0 ? ` lvl-${Math.min(count, 4)}` : '');
-            cell.onclick = () => showNotesForDay(key);
-            grid.appendChild(cell);
-        }
     }
 
     function renderCalendar() {
@@ -514,14 +508,37 @@
         
         const first = new Date(year, month, 1).getDay();
         const days = new Date(year, month + 1, 0).getDate();
-        const noteDates = new Set(JSON.parse(localStorage.getItem('journal_notes') || '[]').map(n => n.dateKey));
+        
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        const counts = notes.reduce((acc, n) => { 
+            acc[n.dateKey] = (acc[n.dateKey] || 0) + 1; 
+            return acc; 
+        }, {});
+
+        const viewingTitle = document.getElementById('selected-date-title').innerText;
+        const viewingDate = viewingTitle.includes("for ") ? viewingTitle.split("for ")[1] : null;
 
         for(let i=0; i<first; i++) cal.appendChild(document.createElement('div'));
+        
         for(let d=1; d<=days; d++) {
             const key = `${year}-${String(month+1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const count = counts[key] || 0;
             const el = document.createElement('div');
-            el.className = 'calendar-day' + (noteDates.has(key) ? ' has-note' : '');
-            if (getISODate(new Date()) === key) el.style.border = '2px solid var(--accent)';
+            
+            let densityClass = '';
+            if (count > 0) {
+                densityClass = ` lvl-${Math.min(Math.ceil(count / 2), 4)}`; 
+            }
+            
+            el.className = `calendar-day ${densityClass}`;
+            el.title = count > 0 ? `${count} entries captured` : 'No entries yet';
+            
+            if (key === viewingDate) {
+                el.style.border = '2px solid var(--text)'; 
+            } else if (getISODate(new Date()) === key) {
+                el.style.border = '2px dashed var(--accent)';
+            }
+
             el.innerText = d;
             el.onclick = () => showNotesForDay(key);
             cal.appendChild(el);
@@ -546,10 +563,13 @@
                     <button class="action-link edit-link" onclick="window.editNote(${n.id})">Edit</button> 
                     <button class="action-link delete-link" onclick="window.deleteNote(${n.id})">Delete</button>
                 </div>
-            </div>`).join('') || '<p>No entries.</p>';
+            </div>`).join('') || '<p>No entries for this day.</p>';
         renderCalendar();
     }
 
+    /* -------------------------------------------------------------------------- */
+    /* 6. AI & SEARCH                                                             */
+    /* -------------------------------------------------------------------------- */
     async function initLLM() {
         const status = document.getElementById('llm-status');
         if (engine) return;
@@ -593,6 +613,9 @@
         list.innerHTML = filtered.map(n => `<div class="note-item"><small>${n.dateKey}</small><div>${n.content}</div></div>`).join('');
     }
 
+    /* -------------------------------------------------------------------------- */
+    /* 7. HELPERS & STORAGE                                                       */
+    /* -------------------------------------------------------------------------- */
     function formatDuration(ms) {
         const mins = Math.floor(ms / 60000);
         return mins < 1 ? null : mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`;
@@ -640,15 +663,12 @@
             if (icon) icon.innerText = '☀️';
         }
 
-        // DYNAMIC UPDATE LOGIC
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('./sw.js').then(reg => {
                 reg.onupdatefound = () => {
                     const installingWorker = reg.installing;
                     installingWorker.onstatechange = () => {
                         if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            // Automatically reload when a new version is detected
-                            // No confirmation dialog needed = less friction!
                             window.location.reload();
                         }
                     };
