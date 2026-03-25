@@ -196,6 +196,27 @@
     button.primary-btn:active {
         transform: scale(0.98);
     }
+    .streak-dot.filled {
+        background-color: var(--success);
+        border-color: var(--success) !important;
+        box-shadow: 0 0 10px rgba(52, 199, 89, 0.4);
+        transform: scale(1.2);
+    }
+
+    @keyframes pop {
+        0% { transform: scale(0.8); opacity: 0; }
+        80% { transform: scale(1.1); }
+        100% { transform: scale(1); opacity: 1; }
+    }
+
+    .celebrate {
+        animation: celebrate-pulse 0.5s infinite alternate;
+    }
+
+    @keyframes celebrate-pulse {
+        from { transform: scale(1); }
+        to { transform: scale(1.05); }
+    }
     </style>
 </head>
 <body class="dark-mode">
@@ -212,6 +233,15 @@
                     <div id="focus-text" style="font-size: 1.1rem; font-weight: 500; margin-bottom: 15px;"></div>
                     <button class="action-link edit-link" style="font-size: 0.9rem;" onclick="window.completeFocus()">✅ Mark as Finished</button>
                 </div>
+            </div>
+            <div id="streak-container" style="margin-bottom: 20px; text-align: center;">
+                <div style="font-size: 0.7rem; font-weight: 800; opacity: 0.6; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.1rem;">Dopamine Streak</div>
+                <div id="streak-dots" style="display: flex; justify-content: center; gap: 10px;">
+                    <div class="streak-dot" id="dot-1" style="width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border);"></div>
+                    <div class="streak-dot" id="dot-2" style="width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border);"></div>
+                    <div class="streak-dot" id="dot-3" style="width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border);"></div>
+                </div>
+                <div id="streak-message" class="hidden" style="margin-top: 10px; font-size: 0.9rem; font-weight: 700; color: var(--success); animation: pop 0.3s ease;"></div>
             </div>
         <h1 style="margin-bottom: 25px;">How's it going?</h1>
         <textarea id="note-input" placeholder="Start typing... use #tags for projects"></textarea>
@@ -289,17 +319,39 @@
     let engine; 
     const modelId = "Llama-3.2-1B-Instruct-q4f16_1-MLC"; 
 
-    // Helper: Standardized YYYY-MM-DD for cross-device consistency
     const getISODate = (date) => {
         const d = new Date(date);
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
 
     /* -------------------------------------------------------------------------- */
-    /* 2. ADHD FEATURES: FOCUS & TIME TRACKING                                    */
+    /* 2. ADHD FEATURES: STREAK, FOCUS & TIME                                     */
     /* -------------------------------------------------------------------------- */
     
-    // Updates the "Time since last entry" nudge and the focus timer
+    function updateStreakUI() {
+        const streak = parseInt(localStorage.getItem('focus_streak') || '0');
+        const dots = document.querySelectorAll('.streak-dot');
+        const msg = document.getElementById('streak-message');
+        
+        dots.forEach((dot, index) => {
+            if (index < streak) dot.classList.add('filled');
+            else dot.classList.remove('filled');
+        });
+
+        if (streak >= 3) {
+            msg.innerText = "🌟 Dopamine Hit! 3 in a row. You're doing great!";
+            msg.classList.remove('hidden');
+            document.getElementById('focus-section').classList.add('celebrate');
+            // Reset streak after celebration (optional, or keep it going)
+            setTimeout(() => {
+                localStorage.setItem('focus_streak', '0');
+                msg.classList.add('hidden');
+                document.getElementById('focus-section').classList.remove('celebrate');
+                updateStreakUI();
+            }, 5000);
+        }
+    }
+
     function updateLiveTimer() {
         const nudge = document.getElementById('time-blindness-nudge');
         const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
@@ -309,7 +361,6 @@
             return;
         }
 
-        // Calculate time since last log to break time blindness
         const lastNote = notes.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
         const diff = new Date() - new Date(lastNote.timestamp);
         const mins = Math.floor(diff / 60000);
@@ -318,17 +369,14 @@
         else if (mins < 60) nudge.innerText = `⏳ ${mins}m since your last entry.`;
         else nudge.innerText = `⚠️ ${Math.floor(mins/60)}h ${mins%60}m since your last entry.`;
 
-        // Update the Sticky Focus timer if one is active
         const focusStart = localStorage.getItem('focus_start_time');
         if (focusStart) {
             const fDiff = new Date() - new Date(focusStart);
-            const fMins = Math.floor(fDiff / 60000);
             const timerEl = document.getElementById('focus-timer');
-            if (timerEl) timerEl.innerText = `${fMins}m`;
+            if (timerEl) timerEl.innerText = `${Math.floor(fDiff / 60000)}m`;
         }
     }
 
-    // Displays or hides the Sticky Focus card based on storage
     function renderFocus() {
         const focusText = localStorage.getItem('current_focus');
         const section = document.getElementById('focus-section');
@@ -343,7 +391,6 @@
     function startFocus() {
         const text = noteInput.value.trim();
         if (!text) return alert("What are you focusing on?");
-        
         localStorage.setItem('current_focus', text);
         localStorage.setItem('focus_start_time', new Date().toISOString());
         noteInput.value = '';
@@ -356,12 +403,16 @@
         const start = localStorage.getItem('focus_start_time');
         const duration = Math.floor((new Date() - new Date(start)) / 60000);
         
-        // Automatically save the completed task to your history
         saveNote(`✅ Focus Completed: ${text} (#focus for ${duration}m)`);
+        
+        // Increment Streak
+        let streak = parseInt(localStorage.getItem('focus_streak') || '0');
+        localStorage.setItem('focus_streak', (streak + 1).toString());
         
         localStorage.removeItem('current_focus');
         localStorage.removeItem('focus_start_time');
         renderFocus();
+        updateStreakUI();
     }
 
     /* -------------------------------------------------------------------------- */
@@ -378,8 +429,6 @@
             renderAll();
             document.getElementById('notes-list').innerHTML = '';
             document.getElementById('selected-date-title').innerText = '';
-            document.getElementById('search-input').value = '';
-            document.getElementById('calendar').style.display = 'grid';
         }
     }
 
@@ -391,7 +440,7 @@
     }
 
     /* -------------------------------------------------------------------------- */
-    /* 4. CORE JOURNAL LOGIC (CRUD)                                               */
+    /* 4. CORE JOURNAL LOGIC                                                      */
     /* -------------------------------------------------------------------------- */
     function saveNote(manualText = null) {
         const text = manualText || noteInput.value.trim();
@@ -410,21 +459,19 @@
         localStorage.setItem('journal_notes', JSON.stringify(notes));
         if (!manualText) noteInput.value = '';
         updateLiveTimer();
-        if (!manualText) alert('Memory saved!');
     }
 
     function deleteNote(id) {
-        if(!confirm('Delete this permanently?')) return;
+        if(!confirm('Delete this?')) return;
         let notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.id !== id);
         localStorage.setItem('journal_notes', JSON.stringify(notes));
         renderAll();
-        document.getElementById('notes-list').innerHTML = '';
     }
 
     function editNote(id) {
         const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
         const idx = notes.findIndex(n => n.id === id);
-        const newText = prompt("Update your note:", notes[idx].content);
+        const newText = prompt("Update note:", notes[idx].content);
         if (newText) {
             notes[idx].content = newText;
             localStorage.setItem('journal_notes', JSON.stringify(notes));
@@ -433,7 +480,7 @@
     }
 
     /* -------------------------------------------------------------------------- */
-    /* 5. RENDERING (CALENDAR & HEATMAP)                                          */
+    /* 5. RENDERING & AI                                                          */
     /* -------------------------------------------------------------------------- */
     function renderAll() {
         renderHeatmap();
@@ -468,21 +515,13 @@
         const first = new Date(year, month, 1).getDay();
         const days = new Date(year, month + 1, 0).getDate();
         const noteDates = new Set(JSON.parse(localStorage.getItem('journal_notes') || '[]').map(n => n.dateKey));
-        const viewingDate = document.getElementById('selected-date-title').innerText.split("for ")[1];
 
         for(let i=0; i<first; i++) cal.appendChild(document.createElement('div'));
         for(let d=1; d<=days; d++) {
             const key = `${year}-${String(month+1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
             const el = document.createElement('div');
             el.className = 'calendar-day' + (noteDates.has(key) ? ' has-note' : '');
-            
-            if (key === viewingDate) {
-                el.style.backgroundColor = 'var(--accent)';
-                el.style.color = 'white';
-            } else if (getISODate(new Date()) === key) {
-                el.style.border = '2px solid var(--accent)';
-            }
-
+            if (getISODate(new Date()) === key) el.style.border = '2px solid var(--accent)';
             el.innerText = d;
             el.onclick = () => showNotesForDay(key);
             cal.appendChild(el);
@@ -494,55 +533,32 @@
         const title = document.getElementById('selected-date-title');
         const llmControls = document.getElementById('llm-controls');
         const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        
-        const filtered = notes
-            .filter(n => n.dateKey === dateKey)
-            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const filtered = notes.filter(n => n.dateKey === dateKey).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
 
         title.innerText = `Notes for ${dateKey}`;
         if (llmControls) llmControls.style.display = filtered.length > 0 ? 'block' : 'none';
 
-        list.innerHTML = filtered.length ? filtered.map((n, i) => {
-            let durationHtml = '';
-            if (i > 0) {
-                const diff = new Date(n.timestamp) - new Date(filtered[i - 1].timestamp);
-                const duration = formatDuration(diff);
-                if (duration) durationHtml = `<div class="duration-badge">⏱️ ${duration} elapsed</div>`;
-            }
-
-            return `
-                <div class="note-item">
-                    ${durationHtml}
-                    <div class="note-meta">
-                        <span>${new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                    </div>
-                    <div class="note-text" style="margin: 10px 0; font-size: 1.05rem;">${n.content.replace(/\n/g, '<br>')}</div>
-                    <div class="note-actions">
-                        <button class="action-link edit-link" onclick="window.editNote(${n.id})">Edit</button> 
-                        <button class="action-link delete-link" onclick="window.deleteNote(${n.id})">Delete</button>
-                    </div>
-                </div>`;
-        }).join('') : '<p style="color: #8e8e93; text-align:center; padding: 40px 0;">No entries found.</p>';
-        
+        list.innerHTML = filtered.map((n, i) => `
+            <div class="note-item">
+                <div class="note-meta"><span>${new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span></div>
+                <div class="note-text" style="margin: 10px 0;">${n.content.replace(/\n/g, '<br>')}</div>
+                <div class="note-actions">
+                    <button class="action-link edit-link" onclick="window.editNote(${n.id})">Edit</button> 
+                    <button class="action-link delete-link" onclick="window.deleteNote(${n.id})">Delete</button>
+                </div>
+            </div>`).join('') || '<p>No entries.</p>';
         renderCalendar();
-        title.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    /* -------------------------------------------------------------------------- */
-    /* 6. AI & SEARCH                                                             */
-    /* -------------------------------------------------------------------------- */
     async function initLLM() {
         const status = document.getElementById('llm-status');
         if (engine) return;
         try {
-            status.innerText = "Connecting to local AI...";
+            status.innerText = "Connecting AI...";
             const webllm = await import("https://esm.run/@mlc-ai/web-llm");
-            if (!navigator.gpu) throw new Error("WebGPU Not Supported");
-            engine = await webllm.CreateMLCEngine(modelId, { initProgressCallback: (report) => status.innerText = report.text });
-            status.innerText = "AI Coach Ready";
-        } catch (e) {
-            status.innerText = "AI Unavailable: " + e.message;
-        }
+            engine = await webllm.CreateMLCEngine(modelId, { initProgressCallback: (r) => status.innerText = r.text });
+            status.innerText = "Coach Ready";
+        } catch (e) { status.innerText = "Offline Summary Mode"; }
     }
 
     async function generateDailySummary() {
@@ -553,10 +569,10 @@
         try {
             await initLLM();
             btn.disabled = true;
-            output.innerText = "Reflecting on your day...";
+            output.innerText = "Analyzing your wins...";
             const messages = [
-                { role: "system", content: "You are a warm, encouraging life coach. Summarize the user's day by highlighting their wins, efforts made, and providing positive reinforcement to reduce end-of-day anxiety." },
-                { role: "user", content: `My day so far:\n- ${noteTexts}` }
+                { role: "system", content: "Identify every small win and task completed today. Tell the user why their day was NOT a waste to reduce anxiety." },
+                { role: "user", content: noteTexts }
             ];
             const reply = await engine.chat.completions.create({ messages });
             output.innerText = reply.choices[0].message.content;
@@ -572,18 +588,14 @@
 
         if (!query) { cal.style.display = 'grid'; list.innerHTML = ''; title.innerText = ''; return; }
         cal.style.display = 'none';
-        title.innerText = `Search results for "${query}"`;
+        title.innerText = `Search: "${query}"`;
         const filtered = notes.filter(n => n.content.toLowerCase().includes(query)).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-        list.innerHTML = filtered.map(n => `<div class="note-item"><small>${n.dateKey}</small><div class="note-text">${n.content.replace(new RegExp(query, 'gi'), m => `<mark>${m}</mark>`)}</div></div>`).join('');
+        list.innerHTML = filtered.map(n => `<div class="note-item"><small>${n.dateKey}</small><div>${n.content}</div></div>`).join('');
     }
 
-    /* -------------------------------------------------------------------------- */
-    /* 7. HELPERS & EXPORTS                                                       */
-    /* -------------------------------------------------------------------------- */
     function formatDuration(ms) {
         const mins = Math.floor(ms / 60000);
-        if (mins < 1) return null;
-        return mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+        return mins < 1 ? null : mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`;
     }
 
     function renderTagCloud() {
@@ -600,30 +612,26 @@
     }
 
     function changeMonth(dir) { currentMonth.setMonth(currentMonth.getMonth() + dir); renderCalendar(); }
-    
     function exportNotes() {
-        const blob = new Blob([localStorage.getItem('journal_notes')], { type: 'application/json' });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'journal-backup.json'; a.click();
+        const b = new Blob([localStorage.getItem('journal_notes')], { type: 'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'journal.json'; a.click();
     }
-    
-    function importNotes(event) {
-        const reader = new FileReader();
-        reader.onload = (e) => { localStorage.setItem('journal_notes', e.target.result); renderAll(); alert('Imported!'); };
-        reader.readAsText(event.target.files[0]);
+    function importNotes(e) {
+        const r = new FileReader(); r.onload = (ev) => { localStorage.setItem('journal_notes', ev.target.result); renderAll(); alert('Imported!'); };
+        r.readAsText(e.target.files[0]);
     }
 
-    // EXPOSE TO WINDOW FOR HTML BUTTONS
     Object.assign(window, {
         showPage, toggleDarkMode, saveNote, deleteNote, editNote, generateDailySummary,
         changeMonth, exportNotes, importNotes, filterByTag, showNotesForDay, searchNotes,
         startFocus, completeFocus
     });
 
-    // INITIALIZE ADHD ENGINE
     (function init() {
         renderFocus();
         updateLiveTimer();
-        setInterval(updateLiveTimer, 30000); // Pulse every 30s to fight time blindness
+        updateStreakUI();
+        setInterval(updateLiveTimer, 30000);
 
         const saved = localStorage.getItem('dark_mode');
         const icon = document.getElementById('theme-icon');
