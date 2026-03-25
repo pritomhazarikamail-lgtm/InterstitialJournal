@@ -345,9 +345,12 @@
             btn.disabled = true;
             output.innerText = "Generating summary...";
             const messages = [
-                { role: "system", content: "Summarize the logs into a brief standup format (Done/Progress/Blockers)." },
-                { role: "user", content: noteTexts }
-            ];
+                    { 
+                        role: "system", 
+                        content: "You are a warm, encouraging life coach. Summarize the user's day by highlighting their wins, things they were grateful for, and a small positive takeaway for tomorrow." 
+                    },
+                    { role: "user", content: `Here are my thoughts from today:\n- ${noteTexts}` }
+                ];
             const reply = await engine.chat.completions.create({ messages });
             output.innerText = reply.choices[0].message.content;
         } catch (err) { console.error(err); } finally { btn.disabled = false; }
