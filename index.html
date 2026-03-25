@@ -639,7 +639,22 @@
             document.body.classList.remove('dark-mode');
             if (icon) icon.innerText = '☀️';
         }
-        if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+
+        // DYNAMIC UPDATE LOGIC
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').then(reg => {
+                reg.onupdatefound = () => {
+                    const installingWorker = reg.installing;
+                    installingWorker.onstatechange = () => {
+                        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            // Automatically reload when a new version is detected
+                            // No confirmation dialog needed = less friction!
+                            window.location.reload();
+                        }
+                    };
+                };
+            }).catch(() => {});
+        }
     })();
 </script>
 </body>

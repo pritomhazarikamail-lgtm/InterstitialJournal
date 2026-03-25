@@ -1,18 +1,21 @@
 // InterstitialJournal/sw.js
-const CACHE_NAME = 'journal-v2'; // Changed to v2 to force refresh
+const CACHE_NAME = 'journal-dynamic-v1';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './journal_icon.png' // Added your icon to the cache
+  './journal_icon.png'
 ];
 
+// Install: Save the assets to the pocket
 self.addEventListener('install', (e) => {
+  self.skipWaiting(); // Force the new Service Worker to take over immediately
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
 });
 
+// Activate: Clean up old caches if we ever DO change the name
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
@@ -21,12 +24,24 @@ self.addEventListener('activate', (e) => {
       );
     })
   );
+  return self.clients.claim(); // Immediately start controlling all open tabs
 });
 
+// Dynamic Fetch: Network-First Strategy
 self.addEventListener('fetch', (e) => {
   e.respondWith(
-    caches.match(e.request).then((response) => {
-      return response || fetch(e.request);
-    })
+    fetch(e.request)
+      .then((response) => {
+        // If the network is working, save a copy of the new version to the cache
+        const resClone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(e.request, resClone);
+        });
+        return response;
+      })
+      .catch(() => {
+        // If the network fails (offline), return the cached version
+        return caches.match(e.request);
+      })
   );
 });
