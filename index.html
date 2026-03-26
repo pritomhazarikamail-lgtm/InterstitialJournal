@@ -747,6 +747,135 @@
         small { color: var(--muted); font-size: 0.78rem; }
         mark { background: rgba(61,107,255,0.2); color: var(--accent); border-radius: 3px; padding: 0 2px; }
         .note-actions { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; gap: 4px; }
+
+        /* ── Slash command dropdown ── */
+        #slash-dropdown {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+            background: var(--card-bg);
+            border: 1.5px solid var(--accent);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            box-shadow: var(--shadow-md);
+            z-index: 500;
+            animation: slideUp 0.15s ease-out both;
+        }
+        .slash-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 11px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.15s;
+        }
+        .slash-item:last-child { border-bottom: none; }
+        .slash-item.slash-active { background: var(--accent-soft); }
+        .slash-item:hover { background: var(--accent-soft); }
+        .slash-cmd {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--accent);
+            min-width: 72px;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .slash-desc {
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+        .slash-icon { font-size: 1rem; width: 22px; text-align: center; }
+
+        /* ── Next Up field ── */
+        #next-up-wrap {
+            margin: 10px 0 14px;
+        }
+        #next-up-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        #next-up-input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1.5px dashed var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--card-bg);
+            color: var(--text);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s, border-style 0.2s;
+            box-sizing: border-box;
+        }
+        #next-up-input:focus {
+            border-style: solid;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+        #next-up-input::placeholder { color: var(--muted); opacity: 0.5; }
+        #next-up-hint {
+            font-size: 0.7rem;
+            color: var(--muted);
+            margin-top: 4px;
+            padding-left: 2px;
+            opacity: 0.7;
+        }
+
+        /* ── Recent strip ── */
+        #recent-strip {
+            margin-top: 20px;
+            padding-top: 18px;
+            border-top: 1px solid var(--border);
+        }
+        .recent-strip-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 10px;
+        }
+        .recent-note-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 9px 14px 9px 16px;
+            margin-bottom: 6px;
+            position: relative;
+            overflow: hidden;
+        }
+        .recent-note-card::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 3px;
+            background: var(--border);
+            border-radius: 3px 0 0 3px;
+        }
+        .recent-note-card.type-win::before  { background: var(--success); }
+        .recent-note-card.type-todo::before { background: var(--accent); }
+        .recent-note-card.type-block::before { background: var(--danger); }
+        .recent-note-time {
+            font-size: 0.7rem;
+            color: var(--muted);
+            margin-bottom: 3px;
+        }
+        .recent-note-text {
+            font-size: 0.85rem;
+            color: var(--text);
+            line-height: 1.5;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
     </style>
     <!-- web-llm loaded dynamically inside the module script -->
 </head>
@@ -769,7 +898,24 @@
 
 <div class="container">
     <div id="home-page">
-        <div id="time-blindness-nudge"></div>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border);">
+            <div>
+                <div style="display:flex;align-items:baseline;gap:8px;">
+                    <span id="live-time" style="font-size:0.82rem;font-weight:600;font-variant-numeric:tabular-nums;color:var(--muted);"></span>
+                    <span id="live-date" style="font-size:0.82rem;font-weight:600;color:var(--muted);"></span>
+                </div>
+                <div id="time-blindness-nudge" style="font-size:0.72rem;color:var(--muted);font-weight:600;margin-top:3px;text-align:left;"></div>
+            </div>
+            <div id="streak-container" style="text-align:right;">
+                <div class="section-subheader" style="margin-bottom:5px;text-align:right;">Dopamine Streak</div>
+                <div id="streak-dots" style="display:flex;justify-content:flex-end;gap:10px;">
+                    <div class="streak-dot" id="dot-1" style="width:10px;height:10px;border-radius:50%;border:2px solid var(--border);transition:all 0.3s;"></div>
+                    <div class="streak-dot" id="dot-2" style="width:10px;height:10px;border-radius:50%;border:2px solid var(--border);transition:all 0.3s;"></div>
+                    <div class="streak-dot" id="dot-3" style="width:10px;height:10px;border-radius:50%;border:2px solid var(--border);transition:all 0.3s;"></div>
+                </div>
+                <div id="streak-message" class="hidden" style="font-size:0.78rem;font-weight:700;color:var(--success);animation:pop 0.3s ease;margin-top:3px;"></div>
+            </div>
+        </div>
         <div id="focus-section" class="hidden">
             <div class="focus-card" id="focus-card" style="margin-bottom:24px;">
                 <!-- goal text -->
@@ -797,21 +943,28 @@
                 </div>
             </div>
         </div>
-        <div id="streak-container" style="margin-bottom:22px;text-align:center;">
-            <div class="section-subheader">Dopamine Streak</div>
-            <div id="streak-dots" style="display:flex;justify-content:center;gap:12px;margin-bottom:6px;">
-                <div class="streak-dot" id="dot-1" style="width:11px;height:11px;border-radius:50%;border:2px solid var(--border);transition:all 0.3s;"></div>
-                <div class="streak-dot" id="dot-2" style="width:11px;height:11px;border-radius:50%;border:2px solid var(--border);transition:all 0.3s;"></div>
-                <div class="streak-dot" id="dot-3" style="width:11px;height:11px;border-radius:50%;border:2px solid var(--border);transition:all 0.3s;"></div>
-            </div>
-            <div id="streak-message" class="hidden" style="font-size:0.88rem;font-weight:700;color:var(--success);animation:pop 0.3s ease;"></div>
-        </div>
+
         <h1 class="section-header">How's it going?</h1>
-        <textarea id="note-input" placeholder="What are you working on? Use #tags for projects..." maxlength="5000" aria-label="Journal note"></textarea>
+        <div style="position:relative;">
+            <textarea id="note-input" placeholder="What are you working on? Use #tags or type / for commands..." maxlength="5000" aria-label="Journal note"></textarea>
+            <div id="slash-dropdown" style="display:none;" role="listbox" aria-label="Slash commands"></div>
+        </div>
         <div id="char-counter">0 / 5000</div>
+
+        <div id="next-up-wrap">
+            <div id="next-up-label">&#8594; Next up</div>
+            <input type="text" id="next-up-input" maxlength="200" placeholder="What will you work on next? (carries forward on save)" aria-label="Next up" autocomplete="off" />
+            <div id="next-up-hint">Becomes the placeholder for your next note after saving</div>
+        </div>
+
         <div style="display:flex;gap:10px;width:100%;margin-top:2px;">
-            <button class="primary-btn" id="save-btn" style="flex:1;">💾 Save Note</button>
-            <button class="primary-btn" id="focus-btn" style="flex:1;background:var(--surface2);color:var(--accent);border:1.5px solid var(--accent);box-shadow:none;">🎯 Focus</button>
+            <button class="primary-btn" id="save-btn" style="flex:1;">&#128190; Save Note</button>
+            <button class="primary-btn" id="focus-btn" style="flex:1;background:var(--surface2);color:var(--accent);border:1.5px solid var(--accent);box-shadow:none;">&#127919; Focus</button>
+        </div>
+
+        <div id="recent-strip" style="display:none;">
+            <div class="recent-strip-label">Recent</div>
+            <div id="recent-notes-list"></div>
         </div>
     </div>
 
@@ -871,7 +1024,7 @@
             <span class="nav-icon" aria-hidden="true">✍️</span> Write
         </button>
         <button class="nav-item" id="nav-history" aria-label="History">
-            <span class="nav-icon" aria-hidden="true">📚</span> History
+            <span class="nav-icon" aria-hidden="true">📅</span> History
         </button>
         <button class="nav-item" id="nav-sync" aria-label="Sync with Google Drive">
             <span class="nav-icon" id="sync-icon" aria-hidden="true">☁️</span>
@@ -1009,6 +1162,200 @@ let isSyncing    = false; // Mutex: prevents concurrent overlapping syncs
 let currentMonth = new Date();
 const noteInput  = document.getElementById('note-input');
 const charCounter = document.getElementById('char-counter');
+
+/* =============================================================================
+ * SLASH COMMANDS
+ * Triggered when user types / at the start or after a newline.
+ * ============================================================================= */
+const SLASH_COMMANDS = [
+    { cmd: '/win',   icon: '🏆', desc: 'Log a win or achievement',    prefix: '🏆 ', tag: '#win'   },
+    { cmd: '/todo',  icon: '☐',  desc: 'Add a checkbox task',         prefix: '☐ ',  tag: '#todo'  },
+    { cmd: '/block', icon: '🚫', desc: 'Tag a distraction or blocker', prefix: '🚫 ', tag: '#block' },
+    { cmd: '/focus', icon: '🎯', desc: 'Note your current focus',      prefix: '🎯 ', tag: '#focus' },
+    { cmd: '/idea',  icon: '💡', desc: 'Capture a quick idea',         prefix: '💡 ', tag: '#idea'  },
+    { cmd: '/note',  icon: '📝', desc: 'Plain note (no prefix)',       prefix: '',    tag: ''       },
+];
+
+const slashDropdown = document.getElementById('slash-dropdown');
+let _slashActive    = -1;
+let _slashQuery     = '';
+
+function getSlashContext(val, pos) {
+    // Find the nearest / before cursor that is at start or after newline
+    const before = val.slice(0, pos);
+    const match  = before.match(/(?:^|\n)(\/\w*)$/);
+    return match ? match[1] : null;
+}
+
+function showSlashDropdown(query) {
+    _slashQuery = query.toLowerCase();
+    const filtered = SLASH_COMMANDS.filter(c => c.cmd.startsWith(_slashQuery));
+    if (filtered.length === 0) { hideSlashDropdown(); return; }
+
+    slashDropdown.innerHTML = '';
+    _slashActive = 0;
+    filtered.forEach((c, i) => {
+        const item = document.createElement('div');
+        item.className = 'slash-item' + (i === 0 ? ' slash-active' : '');
+        item.setAttribute('role', 'option');
+        item.dataset.index = i;
+
+        const icon = document.createElement('span');
+        icon.className = 'slash-icon';
+        icon.textContent = c.icon;
+
+        const cmd = document.createElement('span');
+        cmd.className = 'slash-cmd';
+        cmd.textContent = c.cmd;
+
+        const desc = document.createElement('span');
+        desc.className = 'slash-desc';
+        desc.textContent = c.desc;
+
+        item.append(icon, cmd, desc);
+        item.addEventListener('mousedown', e => {
+            e.preventDefault(); // keep focus on textarea
+            applySlashCommand(filtered[i]);
+        });
+        slashDropdown.appendChild(item);
+    });
+    slashDropdown.style.display = 'block';
+}
+
+function hideSlashDropdown() {
+    slashDropdown.style.display = 'none';
+    slashDropdown.innerHTML = '';
+    _slashActive = -1;
+}
+
+function setSlashActive(idx) {
+    const items = slashDropdown.querySelectorAll('.slash-item');
+    items.forEach((el, i) => el.classList.toggle('slash-active', i === idx));
+    _slashActive = idx;
+}
+
+function applySlashCommand(cmd) {
+    const val = noteInput.value;
+    const pos = noteInput.selectionStart;
+    // Replace the /xxx trigger with the prefix
+    const before   = val.slice(0, pos);
+    const after    = val.slice(pos);
+    const replaced = before.replace(/(?:^|\n)(\/\w*)$/, (m, trigger) =>
+        m.slice(0, m.length - trigger.length) + cmd.prefix
+    );
+    // Append tag to the full note (after any existing content)
+    // Only add tag if one is defined and not already present
+    const fullAfter = after.trimEnd();
+    const tagSuffix = cmd.tag && !noteInput.value.includes(cmd.tag) ? ' ' + cmd.tag : '';
+    noteInput.value = replaced + fullAfter + tagSuffix;
+    // Place cursor right after the prefix (before the tag at the end)
+    const newPos = replaced.length;
+    noteInput.setSelectionRange(newPos, newPos);
+    // Update char counter
+    charCounter.textContent = `${noteInput.value.length} / 5000`;
+    charCounter.classList.toggle('warn', noteInput.value.length >= 4500);
+    hideSlashDropdown();
+    noteInput.focus();
+}
+
+noteInput.addEventListener('input', () => {
+    const len = noteInput.value.length;
+    charCounter.textContent = `${len} / 5000`;
+    charCounter.classList.toggle('warn', len >= 4500);
+
+    // Slash command detection
+    const query = getSlashContext(noteInput.value, noteInput.selectionStart);
+    if (query !== null) {
+        showSlashDropdown(query);
+    } else {
+        hideSlashDropdown();
+    }
+});
+
+noteInput.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { saveNote(); return; }
+
+    if (slashDropdown.style.display === 'none') return;
+    const items = slashDropdown.querySelectorAll('.slash-item');
+    if (items.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashActive((_slashActive + 1) % items.length);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashActive((_slashActive - 1 + items.length) % items.length);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const idx = Math.max(_slashActive, 0);
+        const filtered = SLASH_COMMANDS.filter(c => c.cmd.startsWith(_slashQuery));
+        if (filtered[idx]) applySlashCommand(filtered[idx]);
+    } else if (e.key === 'Escape') {
+        hideSlashDropdown();
+    }
+});
+
+// Hide dropdown on outside click
+document.addEventListener('click', e => {
+    if (e.target !== noteInput) hideSlashDropdown();
+});
+
+/* =============================================================================
+ * NEXT UP FIELD
+ * ============================================================================= */
+const nextUpInput = document.getElementById('next-up-input');
+
+function getNextUp()       { return localStorage.getItem('next_up') || ''; }
+function setNextUp(val)    { localStorage.setItem('next_up', val.slice(0, 200)); }
+function clearNextUp()     { localStorage.removeItem('next_up'); }
+
+function initNextUp() {
+    const saved = getNextUp();
+    if (saved) {
+        noteInput.placeholder = saved;
+        nextUpInput.value     = '';
+    }
+}
+
+nextUpInput.addEventListener('input', () => {
+    setNextUp(nextUpInput.value.trim());
+});
+
+/* =============================================================================
+ * RECENT STRIP — last 3 notes shown on the write page
+ * ============================================================================= */
+function renderRecentStrip() {
+    const strip    = document.getElementById('recent-strip');
+    const listEl   = document.getElementById('recent-notes-list');
+    const allNotes = getLocalNotes()
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, 3);
+
+    listEl.innerHTML = '';
+    if (allNotes.length === 0) { strip.style.display = 'none'; return; }
+    strip.style.display = 'block';
+
+    allNotes.forEach(n => {
+        const card = document.createElement('div');
+        // Detect type from content prefix for coloured left border
+        const typeClass = n.content.startsWith('🏆') || n.content.startsWith('✅') ? 'type-win'
+            : n.content.startsWith('☐') ? 'type-todo'
+            : n.content.startsWith('🚫') ? 'type-block'
+            : '';
+        card.className = `recent-note-card ${typeClass}`;
+
+        const timeEl = document.createElement('div');
+        timeEl.className = 'recent-note-time';
+        timeEl.textContent = new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+
+        const textEl = document.createElement('div');
+        textEl.className = 'recent-note-text';
+        textEl.textContent = n.content.replace(/\n/g, ' ');
+
+        card.append(timeEl, textEl);
+        listEl.appendChild(card);
+    });
+}
 
 const getISODate = d => {
     const dt = new Date(d);
@@ -1239,6 +1586,15 @@ function updateStreakUI() {
             updateStreakUI();
         }, 5000);
     }
+}
+
+function updateLiveClock() {
+    const now = new Date();
+    const timeEl = document.getElementById('live-time');
+    const dateEl = document.getElementById('live-date');
+    if (!timeEl) return;
+    timeEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    dateEl.textContent = now.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 /* ── Live nudge ────────────────────────────────────────────────────────── */
@@ -1488,9 +1844,22 @@ async function saveNote(manualText = null) {
     setLocalNotes(notes);
 
     if (!manualText) {
+        // Carry forward: Next Up → textarea placeholder
+        const nextUp = nextUpInput.value.trim();
         noteInput.value = '';
         charCounter.textContent = '0 / 5000';
         charCounter.classList.remove('warn');
+        hideSlashDropdown();
+
+        if (nextUp) {
+            noteInput.placeholder = nextUp;
+            setNextUp(nextUp);
+            nextUpInput.value = '';
+        } else {
+            noteInput.placeholder = "What are you working on? Use #tags or type / for commands...";
+            clearNextUp();
+        }
+        renderRecentStrip();
     }
     updateLiveTimer();
     if (accessToken) await uploadToDrive();
@@ -1978,6 +2347,9 @@ function showPage(pageId) {
         document.getElementById('notes-list').innerHTML = '';
         document.getElementById('calendar').style.display = 'grid';
     }
+    if (pageId === 'home-page') {
+        renderRecentStrip();
+    }
 }
 
 function renderAll() { renderTagCloud(); renderCalendar(); }
@@ -2032,32 +2404,17 @@ document.getElementById('import-file').addEventListener('change', importNotes);
 document.getElementById('search-input').addEventListener('input', searchNotes);
 document.getElementById('summarize-btn').addEventListener('click', generateDailySummary);
 
-// Update size note when model selection changes
-// Update size note when model selection changes
 document.getElementById('model-select').addEventListener('change', function() {
     const opt  = this.options[this.selectedIndex];
     const size = opt.getAttribute('data-size') || '';
     document.getElementById('model-dl-note').textContent =
         `⬇️ ${size} download once, then runs offline forever.`;
-    // Reset cached pipeline so new model loads on next click
     _engine = null;
     _loadedModel = null;
     document.getElementById('daily-summary-output').innerHTML = '';
     document.getElementById('daily-summary-output').classList.remove('has-content');
     document.getElementById('llm-status').textContent = '';
     hideDlProgress();
-});
-
-// Live character counter
-noteInput.addEventListener('input', () => {
-    const len = noteInput.value.length;
-    charCounter.textContent = `${len} / 5000`;
-    charCounter.classList.toggle('warn', len >= 4500);
-});
-
-// Keyboard shortcut: Ctrl/Cmd + Enter to save
-noteInput.addEventListener('keydown', e => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') saveNote();
 });
 
 /* =============================================================================
@@ -2068,7 +2425,11 @@ window.addEventListener('load', initGIS);
 (function init() {
     renderFocus();
     updateLiveTimer();
+    updateLiveClock();
+    setInterval(updateLiveClock, 60000);
     updateStreakUI();
+    initNextUp();
+    renderRecentStrip();
     setInterval(updateLiveTimer, 30000);
     // renderFocus() above already resumes the tick if a session was active
 
