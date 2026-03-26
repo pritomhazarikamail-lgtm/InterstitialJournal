@@ -577,9 +577,92 @@
             background: var(--card-bg);
             border: 1.5px solid var(--accent);
             border-radius: var(--radius-lg);
-            padding: 18px 20px;
+            padding: 20px 20px 18px;
             margin-bottom: 24px;
             box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-md);
+        }
+        /* ── Pomodoro ring timer ── */
+        .pomo-ring-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 4px 0 16px;
+        }
+        .pomo-ring-svg { transform: rotate(-90deg); }
+        .pomo-ring-bg  { fill: none; stroke: var(--border); stroke-width: 6; }
+        .pomo-ring-fg  {
+            fill: none;
+            stroke-width: 6;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1s linear, stroke 0.4s;
+        }
+        .pomo-ring-fg.work  { stroke: var(--accent); }
+        .pomo-ring-fg.break { stroke: var(--success); }
+        .pomo-time-label {
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1;
+            margin-top: -66px; /* overlay centre of ring */
+            margin-bottom: 50px;
+            font-variant-numeric: tabular-nums;
+        }
+        .pomo-phase-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 14px;
+        }
+        .pomo-phase-label.work  { color: var(--accent); }
+        .pomo-phase-label.break { color: var(--success); }
+        .pomo-tomatoes {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            margin-bottom: 16px;
+            font-size: 1rem;
+        }
+        .pomo-controls {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+        }
+        .pomo-btn {
+            flex: 1;
+            height: 40px;           /* fixed height — prevents layout shift on label swap */
+            padding: 0 8px;
+            border-radius: var(--radius-sm);
+            border: 1.5px solid transparent;
+            font-weight: 700;
+            font-size: 0.82rem;
+            cursor: pointer;
+            font-family: "DM Sans", sans-serif;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.15s;
+        }
+        .pomo-btn:hover  { opacity: 0.88; transform: translateY(-1px); }
+        .pomo-btn:active { transform: scale(0.97); }
+        .pomo-btn-primary  { background: var(--accent);  color: white; }
+        .pomo-btn-success  { background: var(--success); color: white; }
+        .pomo-btn-danger   { background: var(--danger);  color: white; }
+        .pomo-btn-ghost    { background: transparent; color: var(--accent);
+                             border: 1.5px solid var(--accent); }
+        /* Pause/Resume button: fixed width = widest label so card never shifts */
+        #pomo-pause-btn    { min-width: 96px; }
+        @keyframes pomo-pulse {
+            0%   { box-shadow: 0 0 0 3px var(--accent-soft); }
+            50%  { box-shadow: 0 0 0 8px rgba(61,107,255,0.06); }
+            100% { box-shadow: 0 0 0 3px var(--accent-soft); }
+        }
+        .focus-card.pomo-running { animation: pomo-pulse 3s ease-in-out infinite; }
+        .focus-card.pomo-break   {
+            border-color: var(--success);
+            box-shadow: 0 0 0 3px rgba(26,158,92,0.12), var(--shadow-md);
         }
         /* ── Time nudge ── */
         #time-blindness-nudge {
@@ -688,13 +771,30 @@
     <div id="home-page">
         <div id="time-blindness-nudge"></div>
         <div id="focus-section" class="hidden">
-            <div class="focus-card" style="margin-bottom:24px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <span style="font-size:0.68rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);">Current Focus</span>
-                    <span class="duration-badge" id="focus-timer">0m</span>
+            <div class="focus-card" id="focus-card" style="margin-bottom:24px;">
+                <!-- goal text -->
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <span style="font-size:0.68rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);" id="focus-phase-label">Current Focus</span>
+                    <span id="pomo-tomatoes" class="pomo-tomatoes" aria-label="Pomodoro rounds"></span>
                 </div>
-                <div id="focus-text" style="font-size:1.05rem;font-weight:500;margin-bottom:14px;line-height:1.5;"></div>
-                <button class="action-link edit-link" id="complete-focus-btn" style="font-size:0.85rem;padding:6px 12px;border-radius:8px;background:rgba(61,107,255,0.1);">✅ Mark as Finished</button>
+                <div id="focus-text" style="font-size:1rem;font-weight:600;margin-bottom:14px;line-height:1.5;"></div>
+
+                <!-- ring timer -->
+                <div class="pomo-ring-wrap">
+                    <svg class="pomo-ring-svg" width="120" height="120" viewBox="0 0 120 120" aria-hidden="true">
+                        <circle class="pomo-ring-bg" cx="60" cy="60" r="52"/>
+                        <circle class="pomo-ring-fg work" id="pomo-ring" cx="60" cy="60" r="52"
+                                stroke-dasharray="326.73" stroke-dashoffset="0"/>
+                    </svg>
+                    <div class="pomo-time-label" id="pomo-time-label" aria-live="polite">25:00</div>
+                </div>
+
+                <!-- controls -->
+                <div class="pomo-controls">
+                    <button class="pomo-btn pomo-btn-ghost"    id="pomo-pause-btn">⏸ Pause</button>
+                    <button class="pomo-btn pomo-btn-success"  id="complete-focus-btn">✅ Done</button>
+                    <button class="pomo-btn pomo-btn-danger"   id="pomo-abandon-btn">✕ Abandon</button>
+                </div>
             </div>
         </div>
         <div id="streak-container" style="margin-bottom:22px;text-align:center;">
@@ -1086,8 +1186,42 @@ function mergeNotes(driveData) {
 }
 
 /* =============================================================================
- * 3. ADHD FEATURES
+ * 3. POMODORO + FOCUS
+ *
+ * State lives in localStorage so it survives PWA reloads mid-session.
+ * Keys: pomo_goal, pomo_phase (work|break|idle), pomo_end_ms,
+ *       pomo_rounds, pomo_session_start, pomo_paused_remaining,
+ *       focus_streak
+ *
+ * Ring maths: r=52, circumference = 2π×52 ≈ 326.73
+ * stroke-dashoffset = circumference × (1 − progress)  → 0 = full, 326.73 = empty
  * ============================================================================= */
+
+const POMO_WORK_SECS  = 25 * 60;
+const POMO_SHORT_SECS =  5 * 60;
+const POMO_LONG_SECS  = 15 * 60;
+const POMO_CIRC       = 326.73;   // 2π × r=52
+
+let _pomoTick        = null;   // setInterval handle — null when stopped
+let _pomoPhaseEnding = false;  // re-entrance guard
+
+/* ── Audio tone (no external files needed) ─────────────────────────────── */
+function playTone(freq = 660, dur = 0.3, type = 'sine') {
+    try {
+        const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = type; osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+        osc.start(); osc.stop(ctx.currentTime + dur);
+    } catch(e) {}
+}
+function playWorkDone()  { playTone(880, 0.15); setTimeout(() => playTone(1100, 0.25), 180); }
+function playBreakDone() { playTone(660, 0.15); setTimeout(() => playTone(880,  0.25), 180); }
+
+/* ── Streak UI ─────────────────────────────────────────────────────────── */
 function updateStreakUI() {
     const streak = Math.min(parseInt(localStorage.getItem('focus_streak') || '0', 10), 100);
     document.querySelectorAll('.streak-dot').forEach((dot, i) =>
@@ -1107,6 +1241,7 @@ function updateStreakUI() {
     }
 }
 
+/* ── Live nudge ────────────────────────────────────────────────────────── */
 function updateLiveTimer() {
     const nudge = document.getElementById('time-blindness-nudge');
     const notes = getLocalNotes();
@@ -1115,49 +1250,219 @@ function updateLiveTimer() {
         const mins = Math.floor((Date.now() - new Date(last.timestamp)) / 60000);
         nudge.textContent = mins < 1 ? '✨ Just logged.' : `⏳ ${mins}m since last entry.`;
     }
-    const focusStart = localStorage.getItem('focus_start_time');
-    if (focusStart) {
-        document.getElementById('focus-timer').textContent =
-            `${Math.floor((Date.now() - new Date(focusStart)) / 60000)}m`;
+}
+
+/* ── State ─────────────────────────────────────────────────────────────── */
+function pomoGetState() {
+    return {
+        goal:      localStorage.getItem('pomo_goal')                      || '',
+        phase:     localStorage.getItem('pomo_phase')                     || 'idle',
+        endMs:     parseInt(localStorage.getItem('pomo_end_ms')           || '0', 10),
+        rounds:    parseInt(localStorage.getItem('pomo_rounds')           || '0', 10),
+        sessStart: parseInt(localStorage.getItem('pomo_session_start')    || '0', 10),
+        paused:    parseInt(localStorage.getItem('pomo_paused_remaining') || '0', 10),
+    };
+}
+function pomoSetState(patch) {
+    const map = {
+        goal:'pomo_goal', phase:'pomo_phase', endMs:'pomo_end_ms',
+        rounds:'pomo_rounds', sessStart:'pomo_session_start', paused:'pomo_paused_remaining'
+    };
+    Object.entries(patch).forEach(([k,v]) => { if (map[k]) localStorage.setItem(map[k], String(v)); });
+}
+function pomoClearState() {
+    ['pomo_goal','pomo_phase','pomo_end_ms','pomo_rounds',
+     'pomo_session_start','pomo_paused_remaining',
+     'current_focus','focus_start_time'].forEach(k => localStorage.removeItem(k));
+}
+function pomoDurationForPhase(phase, completedRounds) {
+    if (phase === 'work')  return POMO_WORK_SECS;
+    if (phase === 'break') return (completedRounds > 0 && completedRounds % 4 === 0)
+                                   ? POMO_LONG_SECS : POMO_SHORT_SECS;
+    return 0;
+}
+
+/* ── Tick: stop / start ────────────────────────────────────────────────── */
+function pomoStopTick() {
+    if (_pomoTick !== null) { clearInterval(_pomoTick); _pomoTick = null; }
+}
+function _setPauseBtn(isPaused) {
+    const b = document.getElementById('pomo-pause-btn');
+    if (!b) return;
+    b.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
+    b.style.background    = isPaused ? '#1a9e5c' : 'transparent';
+    b.style.color         = isPaused ? 'white'   : 'var(--accent)';
+    b.style.borderColor   = isPaused ? '#1a9e5c' : 'var(--accent)';
+    b.className = isPaused ? 'pomo-btn pomo-btn-success' : 'pomo-btn pomo-btn-ghost';
+}
+function pomoStartTick() {
+    pomoStopTick();
+    _pomoTick = setInterval(pomoTick, 500);
+    pomoTick();   // render immediately — state is already written before this is called
+}
+function pomoTick() {
+    const s = pomoGetState();
+    if (s.phase === 'idle') { pomoStopTick(); return; }
+
+    const isPaused  = s.paused > 0;
+    const remaining = isPaused
+        ? s.paused
+        : Math.max(0, Math.round((s.endMs - Date.now()) / 1000));
+
+    pomoUpdateDisplay(s, remaining, isPaused);
+
+    if (!isPaused && remaining === 0 && !_pomoPhaseEnding) {
+        _pomoPhaseEnding = true;
+        pomoStopTick();
+        pomoPhaseEnd(s);
     }
 }
 
+/* ── Display ───────────────────────────────────────────────────────────── */
+function pomoUpdateDisplay(s, remaining, isPaused) {
+    const ring      = document.getElementById('pomo-ring');
+    const timeLabel = document.getElementById('pomo-time-label');
+    const phaseEl   = document.getElementById('focus-phase-label');
+    const card      = document.getElementById('focus-card');
+    const pauseBtn  = document.getElementById('pomo-pause-btn');
+    if (!ring) return;
+
+    const total    = pomoDurationForPhase(s.phase, s.rounds);
+    const progress = total > 0 ? (total - remaining) / total : 0;  // 0→full, 1→empty
+    const offset   = POMO_CIRC * progress;
+
+    const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
+    const ss = String(remaining % 60).padStart(2, '0');
+    timeLabel.textContent = `${mm}:${ss}`;
+
+    ring.style.strokeDashoffset = offset;
+    ring.className = `pomo-ring-fg ${s.phase}`;
+
+    const isWork = s.phase === 'work';
+    phaseEl.textContent = isPaused ? '⏸ Paused'
+        : isWork ? `🍅 Work — Round ${s.rounds + 1}` : '☕ Break';
+    phaseEl.className   = `pomo-phase-label ${isPaused ? '' : s.phase}`;
+    card.className      = `focus-card${isWork && !isPaused ? ' pomo-running'
+                          : s.phase === 'break' ? ' pomo-break' : ''}`;
+
+
+    // Tomato counter — show position within current set of 4
+    const toms    = document.getElementById('pomo-tomatoes');
+    if (toms) {
+        const inCycle = s.rounds % 4;
+        const show    = (inCycle === 0 && s.rounds > 0) ? 4 : inCycle;
+        toms.textContent = '';
+        for (let i = 0; i < 4; i++) {
+            const span = document.createElement('span');
+            span.textContent = i < show ? '🍅' : '⬜';
+            toms.appendChild(span);
+        }
+    }
+}
+
+async function pomoPhaseEnd(s) {
+    if (s.phase === 'work') {
+        playWorkDone();
+        const newRounds = s.rounds + 1;
+        const dur = Math.round((Date.now() - s.sessStart) / 60000);
+        await saveNote(`🍅 Pomodoro: ${s.goal} (#focus #pomodoro — round ${newRounds}, ${dur}m total)`);
+        const breakDur = pomoDurationForPhase('break', newRounds);
+        pomoSetState({ phase:'break', rounds:newRounds,
+                       endMs: Date.now() + breakDur * 1000, paused:0 });
+        showToast(`Round ${newRounds} done — ${newRounds % 4 === 0 ? 'Long break (15 min)! 🎉' : 'Short break (5 min)! 🎉'}`, 4000);
+    } else {
+        playBreakDone();
+        pomoSetState({ phase:'work', endMs: Date.now() + POMO_WORK_SECS * 1000, paused:0 });
+        showToast("Break over — let's go! 🍅", 3000);
+    }
+    _pomoPhaseEnding = false;
+    renderFocus();
+    pomoStartTick();
+}
+
+/* ── Public API ─────────────────────────────────────────────────────────── *//* ── Public API ─────────────────────────────────────────────────────────── *//* ── Public API ─────────────────────────────────────────────────────────── */
 async function startFocus() {
     const text = noteInput.value.trim();
     if (!text) { showToast('Enter a focus goal first'); return; }
-    // SECURITY: store raw text; rendered via textContent not innerHTML
-    localStorage.setItem('current_focus', text.slice(0, 200));
-    localStorage.setItem('focus_start_time', new Date().toISOString());
+    pomoClearState();
+    pomoSetState({
+        goal:      text.slice(0, 200),
+        phase:     'work',
+        endMs:     Date.now() + POMO_WORK_SECS * 1000,
+        rounds:    0,
+        sessStart: Date.now(),
+        paused:    0,
+    });
     noteInput.value = '';
     charCounter.textContent = '0 / 5000';
     charCounter.classList.remove('warn');
     renderFocus();
+    _setPauseBtn(false);   // guarantee ⏸ Pause on fresh start
     updateLiveTimer();
 }
 
+function pomoPauseResume() {
+    const s = pomoGetState();
+    if (s.phase === 'idle') return;
+
+    if (s.paused > 0) {
+        // ── RESUME ──
+        pomoSetState({ endMs: Date.now() + s.paused * 1000, paused: 0 });
+        _setPauseBtn(false);   // immediate — no waiting for tick
+        pomoStartTick();
+    } else {
+        // ── PAUSE ──
+        const rem = Math.max(0, Math.round((s.endMs - Date.now()) / 1000));
+        pomoSetState({ paused: rem });
+        pomoStopTick();
+        _setPauseBtn(true);    // immediate — interval is stopped, no tick will overwrite
+        pomoTick();            // update ring/label/tomatoes (does NOT touch button)
+    }
+}
+
 async function completeFocus() {
-    const text  = localStorage.getItem('current_focus');
-    const start = localStorage.getItem('focus_start_time');
-    if (!text || !start) return;
-    const dur = Math.floor((Date.now() - new Date(start)) / 60000);
-    await saveNote(`✅ Finished: ${text} (#focus for ${dur}m)`);
+    const s = pomoGetState();
+    if (!s.goal) return;
+    pomoStopTick();
+    const totalMins = s.sessStart ? Math.round((Date.now() - s.sessStart) / 60000) : 0;
+    const rounds    = s.rounds;
+    await saveNote(`✅ Finished: ${s.goal} (#focus #pomodoro — ${rounds} 🍅, ${totalMins}m)`);
     const streak = parseInt(localStorage.getItem('focus_streak') || '0', 10);
     localStorage.setItem('focus_streak', String(streak + 1));
-    localStorage.removeItem('current_focus');
-    localStorage.removeItem('focus_start_time');
+    pomoClearState();
     renderFocus();
     updateStreakUI();
 }
 
+async function abandonFocus() {
+    const s = pomoGetState();
+    if (!s.goal) return;
+    const confirmed = await showModal({
+        title: 'Abandon Session?',
+        message: `Abandon "${s.goal}"? Progress won't be saved.`,
+        isDanger: true,
+    });
+    if (!confirmed) return;
+    pomoStopTick();
+    pomoClearState();
+    renderFocus();
+    showToast('Session abandoned');
+}
+
 function renderFocus() {
-    const text = localStorage.getItem('current_focus');
+    const s       = pomoGetState();
     const section = document.getElementById('focus-section');
-    if (text) {
-        section.classList.remove('hidden');
-        // SECURITY: textContent — user data never goes into innerHTML
-        document.getElementById('focus-text').textContent = text;
-    } else {
+    if (s.phase === 'idle' && !s.goal) {
         section.classList.add('hidden');
+        pomoStopTick();
+        return;
+    }
+    section.classList.remove('hidden');
+    document.getElementById('focus-text').textContent = s.goal;
+    if (s.phase !== 'idle') {
+        pomoStartTick();   // calls pomoTick() internally
+    } else {
+        pomoTick();
     }
 }
 
@@ -1714,6 +2019,8 @@ function importNotes(e) {
 document.getElementById('save-btn').addEventListener('click', () => saveNote());
 document.getElementById('focus-btn').addEventListener('click', startFocus);
 document.getElementById('complete-focus-btn').addEventListener('click', completeFocus);
+document.getElementById('pomo-pause-btn').addEventListener('click', pomoPauseResume);
+document.getElementById('pomo-abandon-btn').addEventListener('click', abandonFocus);
 document.getElementById('nav-write').addEventListener('click', () => showPage('home-page'));
 document.getElementById('nav-history').addEventListener('click', () => showPage('history-page'));
 document.getElementById('nav-sync').addEventListener('click', handleAuthClick);
@@ -1763,6 +2070,7 @@ window.addEventListener('load', initGIS);
     updateLiveTimer();
     updateStreakUI();
     setInterval(updateLiveTimer, 30000);
+    // renderFocus() above already resumes the tick if a session was active
 
     // Dark mode: default dark; respect explicit saved preference
     const saved  = localStorage.getItem('dark_mode');
