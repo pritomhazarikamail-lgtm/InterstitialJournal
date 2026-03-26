@@ -204,8 +204,7 @@
             font-size: 0.78rem;
             font-weight: 600;
             border: 1px solid var(--border);
-            margin-right: 6px;
-            margin-bottom: 6px;
+            /* No margin — gap on the flex container handles spacing uniformly */
             cursor: pointer;
             font-family: 'DM Sans', sans-serif;
             color: var(--accent);
@@ -213,6 +212,11 @@
             letter-spacing: 0.01em;
         }
         .tag:hover { background: var(--accent-soft); transform: translateY(-1px); }
+        .tag--active {
+            background: var(--accent) !important;
+            color: white !important;
+            border-color: var(--accent) !important;
+        }
         /* ── Calendar ── */
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 28px; }
         .calendar-day {
@@ -536,9 +540,110 @@
             border-radius: var(--radius-sm);
             padding: 10px 14px;
         }
+        /* ══════════════════════════════════════════════════
+         * TAG CLOUD  — two-row cap + overflow popover
+         * ══════════════════════════════════════════════════ */
+        #tag-cloud-wrap {
+            position: relative;
+            /* z-index creates a stacking context so the popover (z-index:600)
+               layers above the search bar, calendar, and all siblings below */
+            z-index: 10;
+            margin-bottom: 22px;
+        }
+
+        /* Same flex container as before; pill is the last item inside it.
+           Two-row cap: each .tag is ~28px tall + 6px gap = 62px for 2 rows. */
+        #tag-cloud {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            /* 2-row cap. Each pill: ~28px tall. Two rows + one gap = 28+6+28 = 62px.
+               The extra 1px prevents subpixel rounding from clipping row 2's border. */
+            max-height: 63px;
+            overflow: hidden;
+        }
+
+        /* Pill: same visual as .tag but muted colour + absolute position.
+           JS sets top/right after measuring the tag layout. */
+        #tag-more-btn {
+            position: absolute;
+            /* top/right set by JS */
+            background: var(--surface2);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+            color: var(--muted);
+            transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.15s;
+            letter-spacing: 0.01em;
+            white-space: nowrap;
+        }
+        #tag-more-btn:hover {
+            background: var(--accent-soft);
+            color: var(--accent);
+            border-color: var(--accent);
+            transform: translateY(-1px);
+        }
+        #tag-more-btn.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        /* Overflow popover */
+        .tag-overflow-popover {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            left: 0;
+            background: var(--card-bg);
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-lg);
+            z-index: 600;
+            animation: slideUp 0.18s ease-out both;
+            overflow: hidden;
+        }
+        .tag-overflow-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px 8px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+            border-bottom: 1px solid var(--border);
+        }
+        .tag-overflow-header button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--muted);
+            font-size: 0.85rem;
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-family: 'DM Sans', sans-serif;
+            transition: background 0.15s;
+        }
+        .tag-overflow-header button:hover { background: var(--surface2); }
+        .tag-overflow-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 12px 14px 14px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
         /* ── Search ── */
         .search-wrapper {
             position: relative;
+            z-index: 1;            /* below tag-cloud-wrap's stacking context */
             margin-bottom: 24px;
         }
         .search-icon {
@@ -1116,7 +1221,22 @@
                 <button id="next-month-btn" aria-label="Next month" style="padding:7px 13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--card-bg);color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:0.9rem;transition:border-color 0.2s;">›</button>
             </div>
         </div>
-        <div id="tag-cloud" style="margin-bottom:22px;display:flex;flex-wrap:wrap;gap:6px;"></div>
+        <div id="tag-cloud-wrap">
+            <!-- Tag pills + the "＋N" overflow pill all live in the same flex container
+                 so the more-pill flows inline with the tags naturally -->
+            <div id="tag-cloud"></div>
+            <!-- Pill sits outside the clipped container so overflow:hidden can't hide it.
+                 JS positions it to align with the last visible tag row. -->
+            <button id="tag-more-btn" class="tag tag--more hidden" aria-haspopup="true" aria-expanded="false">＋ more</button>
+            <!-- Overflow popover anchored to the wrap -->
+            <div id="tag-overflow-popover" class="tag-overflow-popover hidden" role="dialog" aria-label="All tags">
+                <div class="tag-overflow-header">
+                    <span>All tags</span>
+                    <button id="tag-overflow-close" aria-label="Close">✕</button>
+                </div>
+                <div id="tag-overflow-list" class="tag-overflow-list"></div>
+            </div>
+        </div>
         <div class="search-wrapper">
             <span class="search-icon">🔍</span>
             <input type="search" id="search-input" placeholder="Search your thoughts..." aria-label="Search notes">
@@ -1311,8 +1431,9 @@ let driveFileId = null;
 let syncInterval = null;
 let isSyncing    = false; // Mutex: prevents concurrent overlapping syncs
 
-let currentMonth = new Date();
-const noteInput  = document.getElementById('note-input');
+let currentMonth  = new Date();
+let _activeTag    = null;   // currently selected tag filter, null = none
+const noteInput   = document.getElementById('note-input');
 const charCounter = document.getElementById('char-counter');
 
 /* =============================================================================
@@ -2135,6 +2256,9 @@ function renderCalendar() {
 function showNotesForDay(dateKey) {
     // Validate format to prevent injection via crafted dateKey
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
+    // Clicking a calendar day clears the tag filter
+    _activeTag = null;
+    _clearTagActive();
 
     const list     = document.getElementById('notes-list');
     const notes    = getLocalNotes();
@@ -2484,33 +2608,158 @@ function searchNotes() {
 }
 
 function renderTagCloud() {
-    const cloud = document.getElementById('tag-cloud');
-    const tags  = [...new Set(getLocalNotes().flatMap(n => n.tags || []))];
+    const cloud        = document.getElementById('tag-cloud');
+    const moreBtn      = document.getElementById('tag-more-btn');
+    const overflowList = document.getElementById('tag-overflow-list');
+
+    // Reset
     cloud.innerHTML = '';
+    cloud.style.paddingRight = '';
+    overflowList.innerHTML   = '';
+    moreBtn.classList.add('hidden');
+    moreBtn.style.top        = '';
+    moreBtn.style.right      = '';
+
+    // Sort by frequency desc
+    const freq = {};
+    getLocalNotes().forEach(n => (n.tags || []).forEach(t => { freq[t] = (freq[t] || 0) + 1; }));
+    const tags = Object.keys(freq).sort((a, b) => freq[b] - freq[a]);
+    if (tags.length === 0) return;
+
     tags.forEach(t => {
         const btn = document.createElement('button');
         btn.className = 'tag';
-        btn.textContent = t; // tags are pre-validated as /^#\w+$/
-        btn.addEventListener('click', () => filterByTag(t));
+        btn.textContent = t;
+        btn.addEventListener('click', () => { filterByTag(t); closeTagOverflow(); });
         cloud.appendChild(btn);
     });
+
+    requestAnimationFrame(() => {
+        // ── Pass 1: lift clip, measure natural layout ──
+        cloud.style.maxHeight = 'none';
+        void cloud.offsetHeight;
+
+        const allBtns = Array.from(cloud.querySelectorAll('.tag'));
+        if (allBtns.length === 0) { cloud.style.maxHeight = ''; return; }
+
+        const rowH      = allBtns[0].offsetHeight;
+        const gap       = 6;
+        const twoRowCap = rowH + gap + rowH;
+
+        const overflowTags = allBtns.filter(b => b.offsetTop >= twoRowCap);
+
+        if (overflowTags.length === 0) {
+            cloud.style.maxHeight = '';
+            return;
+        }
+
+        // ── Pass 2: make pill visible off-screen to read its real width/height ──
+        moreBtn.textContent      = `＋${overflowTags.length}`;
+        moreBtn.style.visibility = 'hidden';
+        moreBtn.classList.remove('hidden');
+        void moreBtn.offsetHeight;
+        const pillW = moreBtn.offsetWidth;
+        const pillH = moreBtn.offsetHeight;
+        moreBtn.style.visibility = '';
+
+        // Reserve space on the right of the cloud so row-2 tags don't slide under the pill.
+        // Use pillW + gap so there's a natural 6px breathing room.
+        cloud.style.paddingRight = (pillW + gap) + 'px';
+        void cloud.offsetHeight;  // reflow with padding applied
+
+        // ── Pass 3: re-measure overflow with padding in place ──
+        const finalOverflow = allBtns.filter(b => b.offsetTop >= twoRowCap);
+
+        finalOverflow.forEach(btn => {
+            const copy = document.createElement('button');
+            copy.className = 'tag';
+            copy.textContent = btn.textContent;
+            copy.addEventListener('click', () => { filterByTag(btn.textContent); closeTagOverflow(); });
+            overflowList.appendChild(copy);
+        });
+
+        // Update count (may differ from pass-1 count after padding pushed more tags down)
+        moreBtn.textContent = `＋${finalOverflow.length}`;
+
+        // Position pill: bottom-right of the two-row zone.
+        // cloud.offsetTop (within wrap) + capped height - pill height = flush with row-2 bottom.
+        moreBtn.style.top   = (cloud.offsetTop + rowH + gap + rowH - pillH) + 'px';
+        moreBtn.style.right = '0px';
+
+        // Restore clip
+        cloud.style.maxHeight = '';
+    });
+}
+
+function openTagOverflow() {
+    document.getElementById('tag-overflow-popover').classList.remove('hidden');
+    document.getElementById('tag-more-btn').classList.add('active');
+    document.getElementById('tag-more-btn').setAttribute('aria-expanded', 'true');
+}
+
+function closeTagOverflow() {
+    document.getElementById('tag-overflow-popover').classList.add('hidden');
+    document.getElementById('tag-more-btn').classList.remove('active');
+    document.getElementById('tag-more-btn').setAttribute('aria-expanded', 'false');
 }
 
 function filterByTag(tag) {
     if (!/^#\w+$/.test(tag)) return; // SECURITY: re-validate
-    const notes = getLocalNotes().filter(n => n.tags.includes(tag));
-    document.getElementById('calendar').style.display = 'none';
+
+    // Tapping the active tag again → deselect and restore default state
+    if (_activeTag === tag) {
+        _activeTag = null;
+        _clearTagActive();
+        _restoreCalendarState();
+        return;
+    }
+
+    _activeTag = tag;
+    _clearTagActive();
+
+    // Mark every pill with this tag text as active (visible cloud + overflow list)
+    document.querySelectorAll('#tag-cloud .tag, #tag-overflow-list .tag').forEach(btn => {
+        if (btn.textContent.trim() === tag) btn.classList.add('tag--active');
+    });
+
+    const notes = getLocalNotes()
+        .filter(n => n.tags.includes(tag))
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    // Calendar stays visible — just update the notes list and title below it
+    document.getElementById('calendar').style.display = 'grid';
     document.getElementById('selected-date-title').textContent = `Tag: ${tag}`;
     const list = document.getElementById('notes-list');
     list.innerHTML = '';
+
+    if (notes.length === 0) {
+        const p = document.createElement('p');
+        p.textContent = 'No notes with this tag.';
+        list.appendChild(p);
+        return;
+    }
+
     notes.forEach(n => {
-        const card = document.createElement('div');
+        const card    = document.createElement('div');
         card.className = 'note-item';
-        const dateEl = document.createElement('small'); dateEl.textContent = n.dateKey;
-        const body   = document.createElement('div');   body.textContent   = n.content;
+        const dateEl  = document.createElement('small'); dateEl.textContent = n.dateKey;
+        const body    = document.createElement('div');   body.textContent   = n.content;
         card.append(dateEl, body);
         list.appendChild(card);
     });
+}
+
+/** Remove active highlight from all tag pills. */
+function _clearTagActive() {
+    document.querySelectorAll('.tag--active').forEach(b => b.classList.remove('tag--active'));
+}
+
+/** Restore the calendar view (no tag filter, no date selection). */
+function _restoreCalendarState() {
+    document.getElementById('calendar').style.display = 'grid';
+    document.getElementById('selected-date-title').textContent = '';
+    document.getElementById('notes-list').innerHTML = '';
+    document.getElementById('llm-controls').style.display = 'none';
 }
 
 /* =============================================================================
@@ -2523,8 +2772,12 @@ function showPage(pageId) {
     document.getElementById('nav-write').classList.toggle('active', pageId === 'home-page');
     document.getElementById('nav-history').classList.toggle('active', pageId === 'history-page');
     if (pageId === 'history-page') {
+        _activeTag = null;
+        _clearTagActive();
         renderAll();
         document.getElementById('notes-list').innerHTML = '';
+        document.getElementById('llm-controls').style.display = 'none';
+        document.getElementById('selected-date-title').textContent = '';
         document.getElementById('calendar').style.display = 'grid';
     }
     if (pageId === 'home-page') {
@@ -2581,6 +2834,20 @@ document.getElementById('prev-month-btn').addEventListener('click', () => change
 document.getElementById('next-month-btn').addEventListener('click', () => changeMonth(1));
 document.getElementById('export-btn').addEventListener('click', exportNotes);
 document.getElementById('import-file').addEventListener('change', importNotes);
+/* Tag overflow popover toggle */
+document.getElementById('tag-more-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    const popover = document.getElementById('tag-overflow-popover');
+    if (popover.classList.contains('hidden')) openTagOverflow();
+    else closeTagOverflow();
+});
+document.getElementById('tag-overflow-close').addEventListener('click', () => closeTagOverflow());
+// Close on outside click
+document.addEventListener('click', e => {
+    const wrap = document.getElementById('tag-cloud-wrap');
+    if (wrap && !wrap.contains(e.target)) closeTagOverflow();
+});
+
 /* Debounce search: avoids scanning all notes on every keystroke */
 let _searchDebounce = null;
 document.getElementById('search-input').addEventListener('input', () => {
