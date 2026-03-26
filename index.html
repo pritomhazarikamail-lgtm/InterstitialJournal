@@ -967,16 +967,6 @@
             flex: 1 1 0;
             min-width: 0;
         }
-
-        /* Time and date on separate lines — cleaner than squeezing them inline */
-        #live-time {
-            font-size: 0.95rem;
-            font-weight: 700;
-            font-variant-numeric: tabular-nums;
-            color: var(--text);
-            line-height: 1.2;
-            white-space: nowrap;
-        }
         #live-date {
             font-size: 0.75rem;
             font-weight: 500;
@@ -1147,7 +1137,6 @@
     <div id="home-page">
         <header class="home-header">
             <div class="home-header__left">
-                <span id="live-time"></span>
                 <span id="live-date"></span>
                 <div id="time-blindness-nudge"></div>
             </div>
@@ -1882,10 +1871,8 @@ function updateStreakUI() {
 
 function updateLiveClock() {
     const now = new Date();
-    const timeEl = document.getElementById('live-time');
     const dateEl = document.getElementById('live-date');
-    if (!timeEl) return;
-    timeEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    if (!dateEl) return;
     dateEl.textContent = now.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
