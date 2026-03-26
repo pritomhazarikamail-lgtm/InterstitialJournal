@@ -235,6 +235,44 @@
         from { transform: scale(1); }
         to { transform: scale(1.05); }
     }
+
+    /* Vertical Thread */
+    #notes-list {
+        position: relative;
+        padding-left: 20px; /* Space for the line */
+        margin-left: 10px;
+        border-left: 2px solid var(--border); /* The Thread */
+    }
+
+    /* Time Elapsed Badge on the Thread */
+    .time-gap-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+        margin: 10px 0;
+        left: -32px; /* Centers the badge on the line */
+        z-index: 10;
+    }
+
+    .duration-badge {
+        background: var(--bg);
+        color: var(--accent);
+        border: 2px solid var(--accent);
+        font-size: 0.7rem;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    /* Ensure the cards have a background to stay above the line */
+    .note-item {
+        position: relative;
+        background: var(--card-bg);
+        margin-left: 10px; /* Offset from the thread */
+        z-index: 5;
+    }
     </style>
 </head>
 <body class="dark-mode">
@@ -555,16 +593,36 @@
         title.innerText = `Notes for ${dateKey}`;
         if (llmControls) llmControls.style.display = filtered.length > 0 ? 'block' : 'none';
 
-        list.innerHTML = filtered.map((n, i) => `
-            <div class="note-item">
-                <div class="note-meta"><span>${new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span></div>
-                <div class="note-text" style="margin: 10px 0;">${n.content.replace(/\n/g, '<br>')}</div>
-                <div class="note-actions">
-                    <button class="action-link edit-link" onclick="window.editNote(${n.id})">Edit</button> 
-                    <button class="action-link delete-link" onclick="window.deleteNote(${n.id})">Delete</button>
-                </div>
-            </div>`).join('') || '<p>No entries for this day.</p>';
+        let htmlOutput = '';
+
+        filtered.forEach((n, i) => {
+            // 1. Calculate and add the Time Gap badge BEFORE the card (if not the first card)
+            if (i > 0) {
+                const diff = new Date(n.timestamp) - new Date(filtered[i - 1].timestamp);
+                const duration = formatDuration(diff);
+                htmlOutput += `
+                    <div class="time-gap-container">
+                        <div class="duration-badge">⏱️ ${duration} gap</div>
+                    </div>`;
+            }
+
+            // 2. Add the Note Card
+            htmlOutput += `
+                <div class="note-item">
+                    <div class="note-meta">
+                        <span>${new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                    </div>
+                    <div class="note-text" style="margin: 10px 0; font-size: 1.05rem;">${n.content.replace(/\n/g, '<br>')}</div>
+                    <div class="note-actions">
+                        <button class="action-link edit-link" onclick="window.editNote(${n.id})">Edit</button> 
+                        <button class="action-link delete-link" onclick="window.deleteNote(${n.id})">Delete</button>
+                    </div>
+                </div>`;
+        });
+
+        list.innerHTML = htmlOutput || '<p style="color: #8e8e93; text-align:center; padding: 40px 0; margin-left: -20px;">No entries for this day.</p>';
         renderCalendar();
+        title.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     /* -------------------------------------------------------------------------- */
@@ -618,7 +676,8 @@
     /* -------------------------------------------------------------------------- */
     function formatDuration(ms) {
         const mins = Math.floor(ms / 60000);
-        return mins < 1 ? null : mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`;
+        if (mins < 1) return "< 1m"; // Show even small gaps
+        return mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
     }
 
     function renderTagCloud() {
