@@ -385,7 +385,7 @@
     };
 
     /* -------------------------------------------------------------------------- */
-    /* 2. GOOGLE DRIVE SYNC (Last Writer Wins & Multipart Fix)                    */
+    /* 2. GOOGLE DRIVE SYNC (Robust Multipart & LWW)                              */
     /* -------------------------------------------------------------------------- */
     function initGIS() {
         if (!window.google || !google.accounts) return;
@@ -430,6 +430,9 @@
             }
             
             await uploadToDrive();
+            
+            // SEAMLESS SYNC: Flag that auth was successful
+            localStorage.setItem('auto_sync_enabled', 'true');
             syncIcon.innerText = '✅';
             syncText.innerText = 'Synced ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
         } catch (err) {
@@ -443,6 +446,7 @@
         const localData = localStorage.getItem('journal_notes') || '[]';
         const metadata = { name: 'journal_data.json', parents: ['appDataFolder'] };
 
+        // Manual Multipart Construction for better browser compatibility
         const boundary = 'sync_boundary_journal';
         const delimiter = "\r\n--" + boundary + "\r\n";
         const close_delim = "\r\n--" + boundary + "--";
@@ -457,7 +461,10 @@
 
         const res = await fetch(url, {
             method: driveFileId ? 'PATCH' : 'POST',
-            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'multipart/related; boundary=' + boundary },
+            headers: { 
+                Authorization: `Bearer ${accessToken}`, 
+                'Content-Type': 'multipart/related; boundary=' + boundary 
+            },
             body: multipartBody
         });
         if (!driveFileId) driveFileId = (await res.json()).id;
@@ -466,8 +473,9 @@
     function mergeNotes(driveNotes) {
         const localNotes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
         const allNotes = [...localNotes, ...driveNotes];
-        const mergedMap = new Map();
         
+        // LAST WRITER WINS: Map deduplication based on timestamp
+        const mergedMap = new Map();
         allNotes.forEach(note => {
             const existing = mergedMap.get(note.id);
             if (!existing || new Date(note.timestamp) > new Date(existing.timestamp)) {
@@ -477,6 +485,7 @@
         
         localStorage.setItem('journal_notes', JSON.stringify(Array.from(mergedMap.values())));
         
+        // Refresh UI if viewing notes
         const currentTitle = document.getElementById('selected-date-title').innerText;
         if (currentTitle.includes("Notes for")) {
             showNotesForDay(currentTitle.split("for ")[1]);
@@ -543,7 +552,7 @@
     }
 
     /* -------------------------------------------------------------------------- */
-    /* 4. CORE JOURNAL LOGIC                                                      */
+    /* 4. CORE JOURNAL LOGIC (CRUD)                                               */
     /* -------------------------------------------------------------------------- */
     async function saveNote(manualText = null) {
         const text = manualText || noteInput.value.trim();
@@ -605,7 +614,6 @@
             const key = `${year}-${String(month+1).padStart(2, '0')}-${String(d).padStart(2, '0')}`, count = counts[key] || 0;
             const el = document.createElement('div');
             el.className = `calendar-day ${count > 0 ? 'lvl-' + Math.min(Math.ceil(count/2), 4) : ''}`;
-            el.title = count > 0 ? `${count} entries` : 'No entries';
             el.innerText = d; el.onclick = () => showNotesForDay(key);
             cal.appendChild(el);
         }
@@ -629,13 +637,13 @@
                     </div>
                 </div>`;
         });
-        list.innerHTML = html || '<p>No entries for this day.</p>';
+        list.innerHTML = html || '<p>No entries.</p>';
         document.getElementById('llm-controls').style.display = filtered.length > 0 ? 'block' : 'none';
         renderCalendar();
     }
 
     /* -------------------------------------------------------------------------- */
-    /* 6. AI, SEARCH & UTILS                                                      */
+    /* 6. AI, SEARCH & STORAGE                                                    */
     /* -------------------------------------------------------------------------- */
     async function generateDailySummary() {
         if (!engine) {
@@ -675,7 +683,7 @@
         document.getElementById('history-page').classList.toggle('hidden', pageId !== 'history-page');
         document.getElementById('nav-write').classList.toggle('active', pageId === 'home-page');
         document.getElementById('nav-history').classList.toggle('active', pageId === 'history-page');
-        if (pageId === 'history-page') { renderAll(); document.getElementById('notes-list').innerHTML = ''; document.getElementById('selected-date-title').innerText = ''; document.getElementById('calendar').style.display = 'grid'; }
+        if (pageId === 'history-page') { renderAll(); document.getElementById('notes-list').innerHTML = ''; document.getElementById('calendar').style.display = 'grid'; }
     }
 
     function renderAll() { renderTagCloud(); renderCalendar(); }
@@ -683,6 +691,9 @@
     function exportNotes() { const b = new Blob([localStorage.getItem('journal_notes')], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'journal.json'; a.click(); }
     function importNotes(e) { const r = new FileReader(); r.onload = (ev) => { localStorage.setItem('journal_notes', ev.target.result); renderAll(); alert('Imported!'); }; r.readAsText(e.target.files[0]); }
 
+    /* -------------------------------------------------------------------------- */
+    /* 7. INITIALIZATION                                                          */
+    /* -------------------------------------------------------------------------- */
     Object.assign(window, { 
         showPage, toggleDarkMode, saveNote, deleteNote, editNote, exportNotes, importNotes,
         changeMonth, handleAuthClick, startFocus, completeFocus, filterByTag, searchNotes, generateDailySummary
@@ -692,9 +703,17 @@
 
     (function init() {
         renderFocus(); updateLiveTimer(); updateStreakUI(); setInterval(updateLiveTimer, 30000);
+        
         const isDark = localStorage.getItem('dark_mode') !== 'false';
         document.body.classList.toggle('dark-mode', isDark);
         document.getElementById('theme-icon').innerText = isDark ? '🌙' : '☀️';
+
+        // SEAMLESS SYNC: Auto-sync on load if previously enabled
+        if (localStorage.getItem('auto_sync_enabled') === 'true') {
+            window.addEventListener('load', () => {
+                setTimeout(() => handleAuthClick(), 2500); 
+            });
+        }
 
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/InterstitialJournal/sw.js').then(reg => {

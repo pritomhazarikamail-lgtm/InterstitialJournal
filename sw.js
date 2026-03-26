@@ -1,5 +1,5 @@
 // InterstitialJournal/sw.js
-const CACHE_NAME = 'journal-dynamic-v1';
+const CACHE_NAME = 'journal-dynamic-v2';
 const ASSETS = [
   './',
   './index.html',
