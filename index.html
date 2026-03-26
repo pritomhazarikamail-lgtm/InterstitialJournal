@@ -388,7 +388,11 @@
     /* 2. GOOGLE DRIVE SYNC (Robust Multipart & LWW)                              */
     /* -------------------------------------------------------------------------- */
     function initGIS() {
-        if (!window.google || !google.accounts) return;
+        if (!window.google || !google.accounts) {
+            // GIS script not ready yet — retry shortly
+            setTimeout(initGIS, 500);
+            return;
+        }
         tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: CLIENT_ID,
             scope: SCOPES,
@@ -398,97 +402,163 @@
                     return;
                 }
                 accessToken = response.access_token;
+                // Schedule token refresh before it expires (~55 min)
+                setTimeout(() => { accessToken = null; }, 55 * 60 * 1000);
                 await syncWithDrive();
+                // Background sync every 3 minutes while session is active
+                startPeriodicSync();
             },
         });
+
+        // Auto-restore session silently (no consent prompt) if previously enabled
+        if (localStorage.getItem('auto_sync_enabled') === 'true') {
+            tokenClient.requestAccessToken({ prompt: '' });
+        }
+    }
+
+    let syncInterval = null;
+    function startPeriodicSync() {
+        if (syncInterval) return; // Already running
+        syncInterval = setInterval(async () => {
+            if (accessToken) await syncWithDrive(true); // silent=true
+        }, 3 * 60 * 1000);
     }
 
     async function handleAuthClick() {
-        if (!accessToken) tokenClient.requestAccessToken({ prompt: 'consent' });
-        else await syncWithDrive();
+        if (!accessToken) {
+            // First time: show account picker; returning user: silent
+            const hadPriorSession = localStorage.getItem('auto_sync_enabled') === 'true';
+            tokenClient.requestAccessToken({ prompt: hadPriorSession ? '' : 'select_account' });
+        } else {
+            await syncWithDrive();
+        }
     }
 
-    async function syncWithDrive() {
+    async function syncWithDrive(silent = false) {
         const syncText = document.getElementById('sync-text');
         const syncIcon = document.getElementById('sync-icon');
         try {
-            syncText.innerText = 'Syncing...';
-            syncIcon.innerText = '⏳';
+            if (!silent) { syncText.innerText = 'Syncing...'; syncIcon.innerText = '⏳'; }
 
-            const res = await fetch("https://www.googleapis.com/drive/v3/files?q=name='journal_data.json'&spaces=appDataFolder", {
-                headers: { Authorization: `Bearer ${accessToken}` }
-            });
-            const { files } = await res.json();
-            
+            // FIX: Find the canonical file ID. If multiple duplicates exist (old bug),
+            // we pick the most recently modified one and delete the rest.
+            const listRes = await fetch(
+                "https://www.googleapis.com/drive/v3/files?q=name='journal_data.json'&spaces=appDataFolder&fields=files(id,modifiedTime)&orderBy=modifiedTime+desc",
+                { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            const { files } = await listRes.json();
+
+            // Clean up duplicate files left by the old bug
+            if (files.length > 1) {
+                for (let i = 1; i < files.length; i++) {
+                    await fetch(`https://www.googleapis.com/drive/v3/files/${files[i].id}`, {
+                        method: 'DELETE',
+                        headers: { Authorization: `Bearer ${accessToken}` }
+                    });
+                }
+            }
+
             if (files.length > 0) {
                 driveFileId = files[0].id;
                 const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
                     headers: { Authorization: `Bearer ${accessToken}` }
                 });
-                const driveNotes = await fileRes.json();
-                mergeNotes(driveNotes);
+                if (fileRes.ok) {
+                    const driveData = await fileRes.json();
+                    // driveData may be raw array (old format) or {notes, deletedIds} (new format)
+                    mergeNotes(driveData);
+                }
             }
-            
+
             await uploadToDrive();
-            
-            // SEAMLESS SYNC: Flag that auth was successful
+
             localStorage.setItem('auto_sync_enabled', 'true');
-            syncIcon.innerText = '✅';
-            syncText.innerText = 'Synced ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            if (!silent) {
+                syncIcon.innerText = '✅';
+                syncText.innerText = 'Synced ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            }
         } catch (err) {
-            syncText.innerText = 'Sync Error';
-            syncIcon.innerText = '❌';
+            console.error('Sync error:', err);
+            if (!silent) { syncText.innerText = 'Sync Error'; syncIcon.innerText = '❌'; }
         }
     }
 
     async function uploadToDrive() {
         if (!accessToken) return;
-        const localData = localStorage.getItem('journal_notes') || '[]';
-        const metadata = { name: 'journal_data.json', parents: ['appDataFolder'] };
 
-        // Manual Multipart Construction for better browser compatibility
+        // Build payload: include a set of deleted IDs so other devices can honour deletes
+        const localNotes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        const deletedIds = JSON.parse(localStorage.getItem('journal_deleted_ids') || '[]');
+        const payload = JSON.stringify({ notes: localNotes, deletedIds });
+
         const boundary = 'sync_boundary_journal';
         const delimiter = "\r\n--" + boundary + "\r\n";
         const close_delim = "\r\n--" + boundary + "--";
-        const multipartBody = 
+
+        // FIX: When driveFileId is null, search once more before creating to avoid duplicate files
+        if (!driveFileId) {
+            const checkRes = await fetch(
+                "https://www.googleapis.com/drive/v3/files?q=name='journal_data.json'&spaces=appDataFolder&fields=files(id)",
+                { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            const { files } = await checkRes.json();
+            if (files.length > 0) driveFileId = files[0].id;
+        }
+
+        const metadata = driveFileId
+            ? {}  // No need to re-send name/parents on update
+            : { name: 'journal_data.json', parents: ['appDataFolder'] };
+
+        const multipartBody =
             delimiter + 'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) +
-            delimiter + 'Content-Type: application/json\r\n\r\n' + localData +
+            delimiter + 'Content-Type: application/json\r\n\r\n' + payload +
             close_delim;
 
-        const url = driveFileId 
+        const url = driveFileId
             ? `https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=multipart`
             : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
 
         const res = await fetch(url, {
             method: driveFileId ? 'PATCH' : 'POST',
-            headers: { 
-                Authorization: `Bearer ${accessToken}`, 
-                'Content-Type': 'multipart/related; boundary=' + boundary 
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'multipart/related; boundary=' + boundary
             },
             body: multipartBody
         });
         if (!driveFileId) driveFileId = (await res.json()).id;
     }
 
-    function mergeNotes(driveNotes) {
+    function mergeNotes(driveData) {
+        // Support both old format (plain array) and new format ({notes, deletedIds})
+        const driveNotes = Array.isArray(driveData) ? driveData : (driveData.notes || []);
+        const driveDeletedIds = new Set(Array.isArray(driveData) ? [] : (driveData.deletedIds || []));
+
         const localNotes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        const allNotes = [...localNotes, ...driveNotes];
-        
-        // LAST WRITER WINS: Map deduplication based on timestamp
+        const localDeletedIds = new Set(JSON.parse(localStorage.getItem('journal_deleted_ids') || '[]'));
+
+        // Union of all known deleted IDs
+        const allDeletedIds = new Set([...localDeletedIds, ...driveDeletedIds]);
+
+        // Merge all notes, last-writer-wins on edits, then strip deleted
         const mergedMap = new Map();
-        allNotes.forEach(note => {
+        [...localNotes, ...driveNotes].forEach(note => {
             const existing = mergedMap.get(note.id);
             if (!existing || new Date(note.timestamp) > new Date(existing.timestamp)) {
                 mergedMap.set(note.id, note);
             }
         });
-        
+
+        // Remove any note that has been deleted on any device
+        allDeletedIds.forEach(id => mergedMap.delete(id));
+
         localStorage.setItem('journal_notes', JSON.stringify(Array.from(mergedMap.values())));
-        
-        // Refresh UI if viewing notes
+        localStorage.setItem('journal_deleted_ids', JSON.stringify(Array.from(allDeletedIds)));
+
+        // Refresh UI if already viewing a day's notes
         const currentTitle = document.getElementById('selected-date-title').innerText;
         if (currentTitle.includes("Notes for")) {
-            showNotesForDay(currentTitle.split("for ")[1]);
+            showNotesForDay(currentTitle.split("Notes for ")[1].trim());
         }
         renderAll();
     }
@@ -583,6 +653,10 @@
         if(!confirm('Delete this permanently?')) return;
         let notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.id !== id);
         localStorage.setItem('journal_notes', JSON.stringify(notes));
+        // Record tombstone so other devices remove this note on next sync
+        const deletedIds = JSON.parse(localStorage.getItem('journal_deleted_ids') || '[]');
+        if (!deletedIds.includes(id)) deletedIds.push(id);
+        localStorage.setItem('journal_deleted_ids', JSON.stringify(deletedIds));
         renderAll();
         if (accessToken) uploadToDrive();
     }
@@ -707,13 +781,6 @@
         const isDark = localStorage.getItem('dark_mode') !== 'false';
         document.body.classList.toggle('dark-mode', isDark);
         document.getElementById('theme-icon').innerText = isDark ? '🌙' : '☀️';
-
-        // SEAMLESS SYNC: Auto-sync on load if previously enabled
-        if (localStorage.getItem('auto_sync_enabled') === 'true') {
-            window.addEventListener('load', () => {
-                setTimeout(() => handleAuthClick(), 2500); 
-            });
-        }
 
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/InterstitialJournal/sw.js').then(reg => {
