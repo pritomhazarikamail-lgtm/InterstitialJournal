@@ -1,5 +1,5 @@
 'use strict';
-const CACHE_NAME = 'journal-v8';
+const CACHE_NAME = 'journal-v14';
 const SHELL_ASSETS = ['./', './index.html', './manifest.json', './journal_icon.png'];
 const ALLOWED_CACHE_ORIGINS = [self.location.origin];
 

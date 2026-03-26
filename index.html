@@ -18,10 +18,13 @@
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'none';
         script-src 'self' https://accounts.google.com/gsi/client
-                   https://cdn.jsdelivr.net 'unsafe-inline' 'wasm-unsafe-eval';
+                   https://cdn.jsdelivr.net https://esm.run https://esm.sh
+                   'unsafe-inline' 'wasm-unsafe-eval';
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
         connect-src https://www.googleapis.com https://accounts.google.com
                     https://cdn.jsdelivr.net
+                    https://esm.run https://esm.sh
+                    https://raw.githubusercontent.com
                     https://huggingface.co https://*.huggingface.co
                     https://hf.co https://*.hf.co;
         img-src 'self' data:;
@@ -662,14 +665,7 @@
         mark { background: rgba(61,107,255,0.2); color: var(--accent); border-radius: 3px; padding: 0 2px; }
         .note-actions { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; gap: 4px; }
     </style>
-    <!-- Import map: resolves bare specifier used inside Transformers.js v3 -->
-    <script type="importmap">
-    {
-        "imports": {
-            "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3/dist/transformers.min.js"
-        }
-    }
-    </script>
+    <!-- web-llm loaded dynamically inside the module script -->
 </head>
 <body class="dark-mode">
 
@@ -742,9 +738,8 @@
                 <div id="llm-status"></div>
                 <div class="model-picker-row">
                     <select class="model-select" id="model-select" aria-label="Choose AI model">
-                        <option value="onnx-community/Qwen2.5-0.5B-Instruct" data-size="~300 MB">Qwen2.5 0.5B — fast &amp; light (~300 MB)</option>
-                        <option value="HuggingFaceTB/SmolLM2-360M-Instruct" data-size="~200 MB">SmolLM2 360M — smallest (~200 MB)</option>
-                        <option value="onnx-community/Qwen2.5-1.5B-Instruct" data-size="~900 MB">Qwen2.5 1.5B — best quality (~900 MB)</option>
+                        <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC" data-size="~700 MB" selected>Llama 3.2 1B — recommended (~700 MB)</option>
+                        <option value="SmolLM2-360M-Instruct-q4f16_1-MLC" data-size="~200 MB">SmolLM2 360M — lightest (~200 MB)</option>
                     </select>
                     <span class="model-dl-note" id="model-dl-note">⬇️ Model downloads once, then runs offline forever.</span>
                 </div>
@@ -1356,64 +1351,41 @@ function showNotesForDay(dateKey) {
 }
 
 /* =============================================================================
- * 6. AI SUMMARY — 100% On-Device via Transformers.js v3
+ * 6. AI SUMMARY — 100% On-Device via @mlc-ai/web-llm
  *
- * Works on localhost AND GitHub Pages.
- *
- * The importmap in <head> maps '@huggingface/transformers' to the jsDelivr
- * CDN URL, so `import { pipeline, env }` resolves correctly at runtime.
- * The script tag is type="module" so the import() works.
- *
- * env.backends.onnx.wasm.wasmPaths tells ORT where to find its .wasm files
- * (same CDN dist/ folder) — without this it looks at the page origin → 404.
- *
- * yieldToMain() yields between heavy steps so the browser stays responsive.
+ * Uses the same WebGPU MLC engine as the original working version.
+ * web-llm handles model download, caching (IndexedDB), and chat internally.
+ * No manual WASM/ONNX wrangling needed — it just works on any WebGPU device.
  * ============================================================================= */
 
-let _pipeline    = null;
+let _engine      = null;
 let _loadedModel = null;
 
-/** Yield to the browser — prevents "Page Unresponsive" during heavy work. */
+/** Yield to the browser — keeps UI responsive during heavy work. */
 function yieldToMain() {
     if (typeof scheduler !== 'undefined' && scheduler.yield) return scheduler.yield();
     return new Promise(function(r) { setTimeout(r, 0); });
 }
 
-async function loadModel(modelId, onProgress) {
-    if (_pipeline && _loadedModel === modelId) return _pipeline;
+async function loadEngine(modelId, onProgress) {
+    if (_engine && _loadedModel === modelId) return _engine;
 
-    // importmap resolves this to the full CDN URL
-    const { pipeline, env } = await import('@huggingface/transformers');
+    // Lazy-load web-llm so it doesn't block page startup
+    const webllm = await import('https://esm.run/@mlc-ai/web-llm');
 
-    // Tell ORT where its own WASM runtime files are — same CDN, same version.
-    // Without this it tries to load ort-wasm*.wasm from the page origin → 404.
-    env.backends.onnx.wasm.wasmPaths =
-        'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3/dist/';
-    env.allowRemoteModels = true;
-    env.allowLocalModels  = false;
-    env.useBrowserCache   = true;
+    if (!navigator.gpu) throw new Error('WebGPU is not supported on this browser/device.');
 
-    await yieldToMain();
-
-    // Try WebGPU (fast GPU), fall back to wasm (universal CPU)
-    for (const [device, dtype] of [['webgpu', 'q4'], ['wasm', 'q4']]) {
-        try {
-            if (device === 'wasm') {
-                onProgress({ _msg: 'No GPU — switching to CPU (1-2 min first time)...' });
-                await yieldToMain();
-            }
-            _pipeline = await pipeline('text-generation', modelId, {
-                dtype,
-                device,
-                progress_callback: onProgress,
-            });
-            _loadedModel = modelId;
-            return _pipeline;
-        } catch (err) {
-            console.warn('device=' + device + ' failed:', err.message);
-            if (device === 'wasm') throw err;
-        }
-    }
+    _engine = await webllm.CreateMLCEngine(modelId, {
+        initProgressCallback: function(report) {
+            // report.text e.g. "Loading model [42/100]..."
+            // report.progress 0..1
+            const pct = report.progress != null ? Math.round(report.progress * 100) : null;
+            setDlProgress(report.text || 'Loading...', pct);
+            onProgress(report);
+        },
+    });
+    _loadedModel = modelId;
+    return _engine;
 }
 
 /* ── UI helpers ─────────────────────────────────────────────────────────────── */
@@ -1430,19 +1402,6 @@ function setDlProgress(text, pct) {
 
 function hideDlProgress() {
     document.getElementById('dl-progress-wrap').style.display = 'none';
-}
-
-function onModelProgress(p) {
-    if (p._msg)                                             { setDlProgress(p._msg, null);           return; }
-    if (p.status === 'initiate')                            { setDlProgress('Starting...', 0);       return; }
-    if (p.status === 'progress' || p.status === 'download') {
-        const pct  = p.total > 0 ? Math.round(p.loaded / p.total * 100) : null;
-        const name = p.file ? p.file.split('/').pop() : 'model';
-        setDlProgress('Downloading ' + name + '...', pct);
-        return;
-    }
-    if (p.status === 'done')    { setDlProgress('Almost ready...', null);        return; }
-    if (p.status === 'loading') { setDlProgress('Loading into memory...', null); }
 }
 
 /* ── Main entry point ───────────────────────────────────────────────────────── */
@@ -1476,57 +1435,82 @@ async function generateDailySummary() {
         setDlProgress('Loading model...', 0);
         await yieldToMain();
 
-        const gen = await loadModel(modelId, onModelProgress);
+        const engine = await loadEngine(modelId, function() {});
         hideDlProgress();
         status.textContent = 'Generating summary...';
         await yieldToMain();
 
         const noteCount = noteTexts.length;
         const joined    = noteTexts.map(function(t, i) { return (i + 1) + '. ' + t; }).join('\n');
-        const truncated = joined.length > 1000 ? joined.slice(0, 1000) + '...' : joined;
+        const truncated = joined.length > 1500 ? joined.slice(0, 1500) + '...' : joined;
 
-        // Three focused prompts — much more reliable on small models than JSON
-        async function ask(question, maxTokens) {
-            await yieldToMain();
-            const prompt = 'Notes from today:\n' + truncated +
-                           '\n\nQuestion: ' + question + '\nAnswer:';
-            return gen(prompt, {
-                max_new_tokens:     maxTokens,
-                temperature:        0.1,
-                repetition_penalty: 1.4,
-                do_sample:          false,
-                return_full_text:   false,
+        // Llama 3.2 1B can follow structured instructions reliably.
+        // SmolLM2 360M is too small — it echoes the system prompt instead of
+        // following it. For SmolLM2 we use a plain conversational prompt and
+        // display the raw response rather than trying to parse sections.
+        const isSmall = modelId.startsWith('SmolLM');
+
+        let fullText;
+
+        if (isSmall) {
+            // Simple prompt — no structure demanded, just ask for a reflection
+            const messages = [
+                {
+                    role: 'user',
+                    content: 'Here are my journal notes from today:\n' + truncated +
+                             '\n\nWrite a short, warm reflection on this day in 2-3 sentences.',
+                },
+            ];
+            const reply = await engine.chat.completions.create({
+                messages:    messages,
+                max_tokens:  120,
+                temperature: 0.4,
             });
+            fullText = (reply.choices[0].message.content || '').trim();
+            // Display as plain reflection — no section parsing
+            renderSummary({ wins: [], themes: [], reflection: fullText, note_count: noteCount }, output);
+        } else {
+            // Llama 3.2 1B — full structured output
+            const messages = [
+                {
+                    role: 'system',
+                    content: 'You are a warm, concise life coach. When given journal notes, respond with exactly three sections using these exact labels:\nWINS: (up to 4 completed tasks, one per line)\nTHEMES: (2-4 one-word tags, comma-separated)\nREFLECTION: (one encouraging sentence about the day)\nNo preamble. No extra text.',
+                },
+                {
+                    role: 'user',
+                    content: 'Here are my journal notes from today:\n' + truncated,
+                },
+            ];
+            const reply = await engine.chat.completions.create({
+                messages:    messages,
+                max_tokens:  200,
+                temperature: 0.2,
+            });
+            fullText = (reply.choices[0].message.content || '').trim();
+
+            function extractSection(label, text) {
+                const re = new RegExp(label + ':\\s*([\\s\\S]*?)(?=\\n[A-Z]{2,}:|$)', 'i');
+                const m  = text.match(re);
+                return m ? m[1].trim() : '';
+            }
+
+            const wins = extractSection('WINS', fullText)
+                .split('\n')
+                .map(function(s) { return s.replace(/^[\s\d.\-*•]+/, '').trim(); })
+                .filter(function(s) { return s.length > 3 && s.length < 120; })
+                .slice(0, 4);
+
+            const themes = extractSection('THEMES', fullText)
+                .split(/,|\n/)
+                .map(function(s) { return s.replace(/[#.'"[\]\d]/g, '').trim().toLowerCase(); })
+                .filter(function(s) { return s.length > 1 && s.length < 25; })
+                .slice(0, 5);
+
+            const reflection = extractSection('REFLECTION', fullText).slice(0, 350)
+                            || fullText.slice(0, 350);
+
+            renderSummary({ wins: wins, themes: themes, reflection: reflection, note_count: noteCount }, output);
         }
-
-        function getText(out) {
-            const gt  = out && out[0] && out[0].generated_text;
-            const raw = (Array.isArray(gt)
-                ? ((gt[gt.length - 1] && gt[gt.length - 1].content) || '')
-                : (typeof gt === 'string' ? gt : '')
-            ).trim();
-            return raw.split(/\n\s*\n/)[0].trim().slice(0, 350);
-        }
-
-        const winsOut   = await ask('What tasks or goals were completed today? List each on its own line, no bullets, max 4 items:', 90);
-        const themesOut = await ask('What are 2-4 one-word topic tags for today? Comma-separated only:', 30);
-        const reflOut   = await ask('In one sentence, what was the overall mood or progress of this day?', 60);
-
-        const wins = getText(winsOut)
-            .split('\n')
-            .map(function(s) { return s.replace(/^[\s\d.\-*]+/, '').trim(); })
-            .filter(function(s) { return s.length > 3 && s.length < 120; })
-            .slice(0, 4);
-
-        const themes = getText(themesOut)
-            .split(/,|\n/)
-            .map(function(s) { return s.replace(/[#.'"[\]\d]/g, '').trim().toLowerCase(); })
-            .filter(function(s) { return s.length > 1 && s.length < 25; })
-            .slice(0, 5);
-
-        const reflection = getText(reflOut);
-
-        renderSummary({ wins: wins, themes: themes, reflection: reflection, note_count: noteCount }, output);
         status.textContent = '';
 
     } catch (err) {
@@ -1749,7 +1733,7 @@ document.getElementById('model-select').addEventListener('change', function() {
     document.getElementById('model-dl-note').textContent =
         `⬇️ ${size} download once, then runs offline forever.`;
     // Reset cached pipeline so new model loads on next click
-    _pipeline = null;
+    _engine = null;
     _loadedModel = null;
     document.getElementById('daily-summary-output').innerHTML = '';
     document.getElementById('daily-summary-output').classList.remove('has-content');
