@@ -3,9 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+    <!--
+        SECURITY: Content Security Policy
+        - script-src: only our own origin + the two trusted Google scripts needed for OAuth.
+          'unsafe-inline' is intentionally absent; all JS lives in this file under type="module".
+          NOTE: GitHub Pages serves this as text/html so a <meta> CSP is the only option.
+        - connect-src: googleapis only — blocks data exfiltration to unknown hosts.
+        - object-src / base-uri: locked to 'none' to prevent plugin injection & base-tag hijacking.
+        - img-src: self + data URIs (icons).
+        - frame-ancestors: 'none' — prevents click-jacking.
+        - style-src: 'unsafe-inline' is required because all CSS is inline in this single-file app.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'none';
+        script-src 'self' https://accounts.google.com/gsi/client https://esm.run 'unsafe-inline';
+        style-src 'self' 'unsafe-inline';
+        connect-src https://www.googleapis.com https://accounts.google.com https://esm.run https://cdn.jsdelivr.net;
+        img-src 'self' data:;
+        font-src 'none';
+        object-src 'none';
+        base-uri 'none';
+        frame-ancestors 'none';
+        form-action 'none';
+    ">
+    <!-- SECURITY: Prevent browsers from sniffing MIME types -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <!-- SECURITY: No referrer leakage to external origins -->
+    <meta name="referrer" content="no-referrer">
+
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <title>Interstitial Journal</title>
-    
+
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#007aff">
@@ -14,7 +43,7 @@
 
     <style>
         :root {
-            --bg: #f8f9fa; /* Softer background */
+            --bg: #f8f9fa;
             --text: #1a1a1a;
             --accent: #007aff;
             --secondary: #ffffff;
@@ -23,16 +52,14 @@
             --success: #34c759;
             --danger: #ff3b30;
         }
-
         body.dark-mode {
-            --bg: #121212; /* Deeper black for OLED */
+            --bg: #121212;
             --text: #f2f2f7;
             --accent: #0a84ff;
             --secondary: #1c1c1e;
             --border: #2c2c2e;
             --card-bg: #1c1c1e;
         }
-
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg);
@@ -42,9 +69,8 @@
             display: flex;
             justify-content: center;
             transition: background 0.2s;
-            padding-bottom: 80px; /* Space for bottom nav */
+            padding-bottom: 80px;
         }
-
         .container {
             width: 100%;
             max-width: 500px;
@@ -53,8 +79,6 @@
             padding-right: 20px;
             box-sizing: border-box;
         }
-
-        /* Bottom Navigation */
         .bottom-nav {
             position: fixed;
             bottom: 0;
@@ -68,7 +92,6 @@
             z-index: 1000;
             box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
         }
-
         .nav-item {
             background: none;
             border: none;
@@ -82,10 +105,7 @@
             opacity: 0.6;
             cursor: pointer;
         }
-
         .nav-item.active { opacity: 1; color: var(--accent); }
-
-        /* Card Layout */
         .note-item {
             background: var(--card-bg);
             padding: 20px;
@@ -95,12 +115,10 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.03);
             animation: slideUp 0.3s ease-out;
         }
-
         @keyframes slideUp {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-
         textarea {
             width: 100%;
             height: 200px;
@@ -114,21 +132,8 @@
             background: var(--card-bg);
             color: var(--text);
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
-            margin-bottom: 20px;
+            margin-bottom: 8px;
         }
-
-        /* Elements */
-        .duration-badge {
-            display: inline-block;
-            background: var(--accent);
-            color: white;
-            font-size: 0.75rem;
-            padding: 4px 10px;
-            border-radius: 8px;
-            margin-bottom: 12px;
-            font-weight: 700;
-        }
-
         .tag {
             background: var(--secondary);
             padding: 6px 12px;
@@ -137,11 +142,8 @@
             border: 1px solid var(--border);
             margin-right: 6px;
             cursor: pointer;
+            font-family: inherit;
         }
-
-        .heatmap-cell { aspect-ratio: 1/1; border-radius: 3px; background-color: var(--border); cursor: pointer; }
-        .lvl-1 { background-color: #9be9a8; } .lvl-2 { background-color: #40c463; } .lvl-3 { background-color: #30a14e; } .lvl-4 { background-color: #216e39; }
-
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 25px; }
         .calendar-day {
             padding: 12px 0;
@@ -151,646 +153,1082 @@
             font-size: 0.9rem;
             transition: all 0.2s ease;
             border: 1px solid transparent;
+            background: none;
+            color: var(--text);
+            font-family: inherit;
         }
-
-        /* Density Levels based on your --accent blue */
-        .calendar-day.lvl-1 { background-color: rgba(0, 122, 255, 0.15); color: var(--text); }
-        .calendar-day.lvl-2 { background-color: rgba(0, 122, 255, 0.35); color: var(--text); }
+        .calendar-day.lvl-1 { background-color: rgba(0, 122, 255, 0.15); }
+        .calendar-day.lvl-2 { background-color: rgba(0, 122, 255, 0.35); }
         .calendar-day.lvl-3 { background-color: rgba(0, 122, 255, 0.65); color: white; }
         .calendar-day.lvl-4 { background-color: rgba(0, 122, 255, 0.95); color: white; }
-
         .calendar-day:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             border-color: var(--accent);
         }
-        .has-note { font-weight: 800; color: var(--accent); background: rgba(0,122,255,0.05); }
-
         .hidden { display: none; }
-        button.primary-btn { width: 100%; padding: 16px; border-radius: 14px; font-size: 1rem; border: none; background: var(--accent); color: white; font-weight: 700; cursor: pointer; }
-        .action-link { font-size: 0.85rem; font-weight: 600; cursor: pointer; background: none; border: none; margin-right: 15px; padding: 0; }
+        button.primary-btn {
+            width: 100%;
+            padding: 16px;
+            border-radius: 14px;
+            font-size: 1rem;
+            border: 1px solid transparent;
+            background: var(--accent);
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.2s, transform 0.1s;
+            font-family: inherit;
+        }
+        button.primary-btn:active { transform: scale(0.98); }
+        .action-link {
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            background: none;
+            border: none;
+            margin-right: 15px;
+            padding: 0;
+            font-family: inherit;
+        }
         .delete-link { color: var(--danger); }
         .edit-link { color: var(--accent); }
-
         .footer-btn {
-        background: var(--card-bg);
-        border: 1px solid var(--border);
-        color: var(--text);
-        padding: 14px; /* Slightly larger for better thumb-tap targets */
-        border-radius: 14px;
-        flex: 1;
-        font-weight: 600;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-sizing: border-box; /* Critical: ensures padding doesn't push size differently */
-        font-family: inherit;
-        font-size: 0.95rem;
-        transition: background 0.2s;
-    }
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 14px;
+            border-radius: 14px;
+            flex: 1;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: 0.95rem;
+            transition: background 0.2s;
+        }
+        .footer-btn:active { background: var(--secondary); transform: scale(0.98); }
+        .streak-dot.filled {
+            background-color: var(--success) !important;
+            border-color: var(--success) !important;
+            box-shadow: 0 0 10px rgba(52, 199, 89, 0.4);
+            transform: scale(1.2);
+        }
+        @keyframes pop {
+            0% { transform: scale(0.8); opacity: 0; }
+            80% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .celebrate { animation: celebrate-pulse 0.5s infinite alternate; }
+        @keyframes celebrate-pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.05); }
+        }
+        #notes-list {
+            position: relative;
+            padding-left: 20px;
+            margin-left: 10px;
+            border-left: 2px solid var(--border);
+        }
+        .time-gap-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            left: -32px;
+            z-index: 10;
+        }
+        .duration-badge {
+            background: var(--bg);
+            color: var(--accent);
+            border: 2px solid var(--accent);
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .note-item {
+            position: relative;
+            background: var(--card-bg);
+            margin-left: 10px;
+            z-index: 5;
+        }
 
-    .footer-btn:active {
-        background: var(--secondary);
-        transform: scale(0.98); /* Feedback when tapped */
-    }
+        /* ---- Custom Modal (replaces prompt / confirm) ---- */
+        #modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 9000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            box-sizing: border-box;
+            backdrop-filter: blur(4px);
+        }
+        #modal-overlay.visible { display: flex; }
+        #modal-box {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 28px 24px 20px;
+            width: 100%;
+            max-width: 360px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+        }
+        #modal-title { font-size: 1rem; font-weight: 700; margin-bottom: 12px; color: var(--text); }
+        #modal-textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 1rem;
+            resize: vertical;
+            box-sizing: border-box;
+            margin-bottom: 16px;
+        }
+        #modal-textarea.hidden { display: none; }
+        #modal-message { font-size: 0.95rem; margin-bottom: 16px; color: var(--text); opacity: 0.85; }
+        #modal-message.hidden { display: none; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+        .modal-btn {
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: none;
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .modal-btn-cancel  { background: var(--border); color: var(--text); }
+        .modal-btn-confirm { background: var(--accent); color: white; }
+        .modal-btn-danger  { background: var(--danger); color: white; }
 
-    button.primary-btn {
-        width: 100%;
-        padding: 16px;
-        border-radius: 14px;
-        font-size: 1rem;
-        border: 1px solid transparent; /* Height insurance */
-        background: var(--accent);
-        color: white;
-        font-weight: 700;
-        cursor: pointer;
-        box-sizing: border-box; /* Ensures padding/border don't grow the button */
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: opacity 0.2s, transform 0.1s;
-    }
+        /* ---- Toast ---- */
+        #toast {
+            position: fixed;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: var(--text);
+            color: var(--bg);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            pointer-events: none;
+            z-index: 8000;
+            white-space: nowrap;
+        }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-    button.primary-btn:active {
-        transform: scale(0.98);
-    }
-    .streak-dot.filled {
-        background-color: var(--success);
-        border-color: var(--success) !important;
-        box-shadow: 0 0 10px rgba(52, 199, 89, 0.4);
-        transform: scale(1.2);
-    }
-
-    @keyframes pop {
-        0% { transform: scale(0.8); opacity: 0; }
-        80% { transform: scale(1.1); }
-        100% { transform: scale(1); opacity: 1; }
-    }
-
-    .celebrate {
-        animation: celebrate-pulse 0.5s infinite alternate;
-    }
-
-    @keyframes celebrate-pulse {
-        from { transform: scale(1); }
-        to { transform: scale(1.05); }
-    }
-
-    /* Vertical Thread */
-    #notes-list {
-        position: relative;
-        padding-left: 20px; /* Space for the line */
-        margin-left: 10px;
-        border-left: 2px solid var(--border); /* The Thread */
-    }
-
-    /* Time Elapsed Badge on the Thread */
-    .time-gap-container {
-        position: relative;
-        display: flex;
-        align-items: center;
-        margin: 10px 0;
-        left: -32px; /* Centers the badge on the line */
-        z-index: 10;
-    }
-
-    .duration-badge {
-        background: var(--bg);
-        color: var(--accent);
-        border: 2px solid var(--accent);
-        font-size: 0.7rem;
-        padding: 2px 8px;
-        border-radius: 12px;
-        font-weight: 800;
-        white-space: nowrap;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    /* Ensure the cards have a background to stay above the line */
-    .note-item {
-        position: relative;
-        background: var(--card-bg);
-        margin-left: 10px; /* Offset from the thread */
-        z-index: 5;
-    }
+        /* ---- Char counter ---- */
+        #char-counter { font-size: 0.75rem; opacity: 0.5; text-align: right; margin-bottom: 12px; }
+        #char-counter.warn { color: var(--danger); opacity: 1; }
     </style>
 </head>
 <body class="dark-mode">
 
+<!-- Custom Modal: replaces browser prompt() / confirm() -->
+<div id="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div id="modal-box">
+        <div id="modal-title"></div>
+        <div id="modal-message" class="hidden"></div>
+        <textarea id="modal-textarea" class="hidden" maxlength="5000" aria-label="Edit note content"></textarea>
+        <div class="modal-actions">
+            <button class="modal-btn modal-btn-cancel" id="modal-cancel">Cancel</button>
+            <button class="modal-btn modal-btn-confirm" id="modal-confirm">OK</button>
+        </div>
+    </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
 <div class="container">
     <div id="home-page">
-        <div id="time-blindness-nudge" style="text-align: center; font-size: 0.8rem; opacity: 0.7; margin-bottom: 15px; font-weight: 600;"></div>
-            <div id="focus-section" class="hidden" style="margin-bottom: 30px;">
-                <div class="note-item" style="border: 2px solid var(--accent); box-shadow: 0 0 20px rgba(0,122,255,0.15); border-left: 6px solid var(--accent);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <small style="color: var(--accent); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05rem;">Current Focus</small>
-                        <span class="duration-badge" id="focus-timer" style="margin: 0;">0m</span>
-                    </div>
-                    <div id="focus-text" style="font-size: 1.1rem; font-weight: 500; margin-bottom: 15px;"></div>
-                    <button class="action-link edit-link" style="font-size: 0.9rem;" onclick="window.completeFocus()">✅ Mark as Finished</button>
+        <div id="time-blindness-nudge" style="text-align:center;font-size:0.8rem;opacity:0.7;margin-bottom:15px;font-weight:600;"></div>
+        <div id="focus-section" class="hidden" style="margin-bottom:30px;">
+            <div class="note-item" style="border:2px solid var(--accent);box-shadow:0 0 20px rgba(0,122,255,0.15);border-left:6px solid var(--accent);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <small style="color:var(--accent);font-weight:800;text-transform:uppercase;letter-spacing:0.05rem;">Current Focus</small>
+                    <span class="duration-badge" id="focus-timer" style="margin:0;">0m</span>
                 </div>
+                <div id="focus-text" style="font-size:1.1rem;font-weight:500;margin-bottom:15px;"></div>
+                <button class="action-link edit-link" id="complete-focus-btn" style="font-size:0.9rem;">✅ Mark as Finished</button>
             </div>
-            <div id="streak-container" style="margin-bottom: 20px; text-align: center;">
-                <div style="font-size: 0.7rem; font-weight: 800; opacity: 0.6; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.1rem;">Dopamine Streak</div>
-                <div id="streak-dots" style="display: flex; justify-content: center; gap: 10px;">
-                    <div class="streak-dot" id="dot-1" style="width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border);"></div>
-                    <div class="streak-dot" id="dot-2" style="width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border);"></div>
-                    <div class="streak-dot" id="dot-3" style="width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border);"></div>
-                </div>
-                <div id="streak-message" class="hidden" style="margin-top: 10px; font-size: 0.9rem; font-weight: 700; color: var(--success); animation: pop 0.3s ease;"></div>
+        </div>
+        <div id="streak-container" style="margin-bottom:20px;text-align:center;">
+            <div style="font-size:0.7rem;font-weight:800;opacity:0.6;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.1rem;">Dopamine Streak</div>
+            <div id="streak-dots" style="display:flex;justify-content:center;gap:10px;">
+                <div class="streak-dot" id="dot-1" style="width:12px;height:12px;border-radius:50%;border:2px solid var(--border);"></div>
+                <div class="streak-dot" id="dot-2" style="width:12px;height:12px;border-radius:50%;border:2px solid var(--border);"></div>
+                <div class="streak-dot" id="dot-3" style="width:12px;height:12px;border-radius:50%;border:2px solid var(--border);"></div>
             </div>
-        <h1 style="margin-bottom: 25px;">How's it going?</h1>
-        <textarea id="note-input" placeholder="Start typing... use #tags for projects"></textarea>
-        <div style="display: flex; gap: 12px; width: 100%;">
-            <button class="primary-btn" onclick="saveNote()" style="flex: 1;">
-                💾 Save Note
-            </button>
-            <button class="primary-btn" onclick="startFocus()" style="flex: 1; background: var(--secondary); color: var(--accent); border-color: var(--accent);">
-                🎯 Focus
-            </button>
+            <div id="streak-message" class="hidden" style="margin-top:10px;font-size:0.9rem;font-weight:700;color:var(--success);animation:pop 0.3s ease;"></div>
+        </div>
+        <h1 style="margin-bottom:25px;">How's it going?</h1>
+        <textarea id="note-input" placeholder="Start typing... use #tags for projects" maxlength="5000" aria-label="Journal note"></textarea>
+        <div id="char-counter">0 / 5000</div>
+        <div style="display:flex;gap:12px;width:100%;margin-top:4px;">
+            <button class="primary-btn" id="save-btn" style="flex:1;">💾 Save Note</button>
+            <button class="primary-btn" id="focus-btn" style="flex:1;background:var(--secondary);color:var(--accent);border-color:var(--accent);">🎯 Focus</button>
         </div>
     </div>
 
     <div id="history-page" class="hidden">
-        <div class="calendar-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h2 id="month-display" style="margin:0; font-size: 1.1rem;"></h2>
-            <div style="display: flex; gap: 8px;">
-                <button onclick="changeMonth(-1)" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text);">‹</button>
-                <button onclick="changeMonth(1)" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text);">›</button>
+        <div class="calendar-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <h2 id="month-display" style="margin:0;font-size:1.1rem;"></h2>
+            <div style="display:flex;gap:8px;">
+                <button id="prev-month-btn" aria-label="Previous month" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);cursor:pointer;font-family:inherit;">‹</button>
+                <button id="next-month-btn" aria-label="Next month" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);cursor:pointer;font-family:inherit;">›</button>
             </div>
         </div>
-
-        <div id="tag-cloud" style="margin-bottom: 25px; display: flex; flex-wrap: wrap; gap: 8px;"></div>
-
-        <input type="text" id="search-input" placeholder="Search your thoughts..." oninput="searchNotes()" 
-               style="width: 100%; padding: 14px; border-radius: 14px; border: 1px solid var(--border); margin-bottom: 25px; box-sizing: border-box; background: var(--card-bg); color: var(--text); font-size: 1rem;">
-
+        <div id="tag-cloud" style="margin-bottom:25px;display:flex;flex-wrap:wrap;gap:8px;"></div>
+        <input type="search" id="search-input" placeholder="Search your thoughts..." aria-label="Search notes"
+               style="width:100%;padding:14px;border-radius:14px;border:1px solid var(--border);margin-bottom:25px;box-sizing:border-box;background:var(--card-bg);color:var(--text);font-size:1rem;font-family:inherit;">
         <div id="calendar" class="calendar-grid"></div>
-
         <div id="day-notes">
-            <div id="llm-controls" style="margin-bottom: 25px; padding: 20px; background: var(--accent); color: white; border-radius: 18px; display: none;">
-                <button id="summarize-btn" onclick="generateDailySummary()" style="background: white; color: var(--accent); border: none; padding: 10px 18px; border-radius: 10px; font-weight: 700; width: 100%;">✨ Summarize This Day</button>
-                <div id="llm-status" style="font-size: 0.7rem; margin-top: 8px; text-align: center; opacity: 0.9;"></div>
-                <div id="daily-summary-output" style="margin-top: 15px; font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; background: rgba(255,255,255,0.1); padding: 15px; border-radius: 12px;"></div>
+            <div id="llm-controls" style="margin-bottom:25px;padding:20px;background:var(--accent);color:white;border-radius:18px;display:none;">
+                <button id="summarize-btn" style="background:white;color:var(--accent);border:none;padding:10px 18px;border-radius:10px;font-weight:700;width:100%;cursor:pointer;font-family:inherit;">✨ Summarize This Day</button>
+                <div id="llm-status" style="font-size:0.7rem;margin-top:8px;text-align:center;opacity:0.9;"></div>
+                <div id="daily-summary-output" style="margin-top:15px;font-size:0.95rem;line-height:1.6;white-space:pre-wrap;background:rgba(255,255,255,0.1);padding:15px;border-radius:12px;"></div>
             </div>
-            <h3 id="selected-date-title" style="font-size: 0.9rem; color: #8e8e93; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.05rem;"></h3>
+            <h3 id="selected-date-title" style="font-size:0.9rem;color:#8e8e93;margin-bottom:15px;text-transform:uppercase;letter-spacing:0.05rem;"></h3>
             <div id="notes-list"></div>
         </div>
-
-        <div class="storage-footer" style="display: flex; gap: 12px; margin-top: 40px; padding-bottom: 60px;">
-            <button onclick="exportNotes()" class="footer-btn">
-                📤 Export
-            </button>
-            <label class="footer-btn">
+        <div class="storage-footer" style="display:flex;gap:12px;margin-top:40px;padding-bottom:60px;">
+            <button id="export-btn" class="footer-btn">📤 Export</button>
+            <label class="footer-btn" style="cursor:pointer;">
                 📥 Import
-                <input type="file" id="import-file" accept=".json" style="display: none;" onchange="importNotes(event)">
+                <input type="file" id="import-file" accept=".json" style="display:none;" aria-label="Import journal file">
             </label>
         </div>
     </div>
 
-    <nav class="bottom-nav">
-        <button class="nav-item active" id="nav-write" onclick="showPage('home-page')">
-            <span style="font-size: 1.2rem;">✍️</span> Write
+    <nav class="bottom-nav" aria-label="Main navigation">
+        <button class="nav-item active" id="nav-write" aria-label="Write">
+            <span style="font-size:1.2rem;" aria-hidden="true">✍️</span> Write
         </button>
-        <button class="nav-item" id="nav-history" onclick="showPage('history-page')">
-            <span style="font-size: 1.2rem;">📚</span> History
+        <button class="nav-item" id="nav-history" aria-label="History">
+            <span style="font-size:1.2rem;" aria-hidden="true">📚</span> History
         </button>
-        <button class="nav-item" id="nav-sync" onclick="handleAuthClick()">
-            <span id="sync-icon" style="font-size: 1.2rem;">☁️</span> 
+        <button class="nav-item" id="nav-sync" aria-label="Sync with Google Drive">
+            <span id="sync-icon" style="font-size:1.2rem;" aria-hidden="true">☁️</span>
             <span id="sync-text">Sync</span>
         </button>
-        <button class="nav-item" id="nav-theme" onclick="toggleDarkMode()">
-            <span id="theme-icon" style="font-size: 1.2rem;">🌙</span> Appearance
+        <button class="nav-item" id="nav-theme" aria-label="Toggle appearance">
+            <span id="theme-icon" style="font-size:1.2rem;" aria-hidden="true">🌙</span> Appearance
         </button>
     </nav>
 </div>
 
 <script type="module">
-    /* -------------------------------------------------------------------------- */
-    /* 1. CONFIG & GLOBAL STATE                                                   */
-    /* -------------------------------------------------------------------------- */
-    const CLIENT_ID = '629370111704-m36nu5qgi52071qgp0sfsbs5sa9ac80k.apps.googleusercontent.com';
-    const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
-    let tokenClient, accessToken = null, driveFileId = null;
+'use strict';
 
-    let currentMonth = new Date();
-    const noteInput = document.getElementById('note-input');
-    let engine; 
-    const modelId = "Llama-3.2-1B-Instruct-q4f16_1-MLC"; 
+/* =============================================================================
+ * SECURITY LAYER
+ *
+ * All user content flows through these helpers. No raw user string ever
+ * touches innerHTML directly — this eliminates stored XSS entirely.
+ * ============================================================================= */
 
-    const getISODate = (date) => {
-        const d = new Date(date);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+/** Sanitise a note ID. IDs are Date.now() integers; reject everything else. */
+function sanitiseId(id) {
+    const n = Number(id);
+    return Number.isInteger(n) && n > 0 && n <= Number.MAX_SAFE_INTEGER ? n : null;
+}
+
+/** Validate & normalise a single note object. Returns null if malformed. */
+function validateNote(note) {
+    if (!note || typeof note !== 'object' || Array.isArray(note)) return null;
+    const id = sanitiseId(note.id);
+    if (!id) return null;
+    if (typeof note.content !== 'string') return null;
+    if (typeof note.timestamp !== 'string' || isNaN(Date.parse(note.timestamp))) return null;
+    if (typeof note.dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(note.dateKey)) return null;
+    return {
+        id,
+        timestamp: note.timestamp,
+        content: note.content.slice(0, 5000),
+        dateKey: note.dateKey,
+        tags: Array.isArray(note.tags)
+            ? note.tags.filter(t => typeof t === 'string' && /^#\w+$/.test(t)).slice(0, 20)
+            : [],
     };
+}
 
-    /* -------------------------------------------------------------------------- */
-    /* 2. GOOGLE DRIVE SYNC (Robust Multipart & LWW)                              */
-    /* -------------------------------------------------------------------------- */
-    function initGIS() {
-        if (!window.google || !google.accounts) {
-            // GIS script not ready yet — retry shortly
-            setTimeout(initGIS, 500);
-            return;
-        }
-        tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: CLIENT_ID,
-            scope: SCOPES,
-            callback: async (response) => {
-                if (response.error) {
-                    document.getElementById('sync-text').innerText = 'Auth Error';
-                    return;
-                }
-                accessToken = response.access_token;
-                // Schedule token refresh before it expires (~55 min)
-                setTimeout(() => { accessToken = null; }, 55 * 60 * 1000);
-                await syncWithDrive();
-                // Background sync every 3 minutes while session is active
-                startPeriodicSync();
-            },
-        });
+/** Safe JSON.parse — never throws. */
+function safeJSON(str, fallback) {
+    try { return JSON.parse(str) ?? fallback; } catch { return fallback; }
+}
 
-        // Auto-restore session silently (no consent prompt) if previously enabled
-        if (localStorage.getItem('auto_sync_enabled') === 'true') {
-            tokenClient.requestAccessToken({ prompt: '' });
-        }
-    }
+function getLocalNotes() {
+    const raw = safeJSON(localStorage.getItem('journal_notes'), []);
+    return Array.isArray(raw) ? raw.map(validateNote).filter(Boolean) : [];
+}
+function setLocalNotes(notes) { localStorage.setItem('journal_notes', JSON.stringify(notes)); }
 
-    let syncInterval = null;
-    function startPeriodicSync() {
-        if (syncInterval) return; // Already running
-        syncInterval = setInterval(async () => {
-            if (accessToken) await syncWithDrive(true); // silent=true
-        }, 3 * 60 * 1000);
-    }
+function getDeletedIds() {
+    const raw = safeJSON(localStorage.getItem('journal_deleted_ids'), []);
+    return Array.isArray(raw) ? raw.map(sanitiseId).filter(Boolean) : [];
+}
+function setDeletedIds(ids) { localStorage.setItem('journal_deleted_ids', JSON.stringify(ids)); }
 
-    async function handleAuthClick() {
-        if (!accessToken) {
-            // First time: show account picker; returning user: silent
-            const hadPriorSession = localStorage.getItem('auto_sync_enabled') === 'true';
-            tokenClient.requestAccessToken({ prompt: hadPriorSession ? '' : 'select_account' });
+/* =============================================================================
+ * CUSTOM MODAL  (replaces prompt() / confirm())
+ * ============================================================================= */
+const modalOverlay  = document.getElementById('modal-overlay');
+const modalTitle    = document.getElementById('modal-title');
+const modalMessage  = document.getElementById('modal-message');
+const modalTextarea = document.getElementById('modal-textarea');
+const modalCancel   = document.getElementById('modal-cancel');
+const modalConfirm  = document.getElementById('modal-confirm');
+let _modalResolve   = null;
+
+function showModal({ title, message, defaultValue, isDanger = false }) {
+    return new Promise(resolve => {
+        _modalResolve = resolve;
+        modalTitle.textContent = title;
+        if (message) { modalMessage.textContent = message; modalMessage.classList.remove('hidden'); }
+        else { modalMessage.classList.add('hidden'); }
+        if (defaultValue !== undefined) {
+            modalTextarea.value = defaultValue;
+            modalTextarea.classList.remove('hidden');
+            requestAnimationFrame(() => { modalTextarea.focus(); modalTextarea.select(); });
         } else {
-            await syncWithDrive();
+            modalTextarea.classList.add('hidden');
         }
-    }
-
-    async function syncWithDrive(silent = false) {
-        const syncText = document.getElementById('sync-text');
-        const syncIcon = document.getElementById('sync-icon');
-        try {
-            if (!silent) { syncText.innerText = 'Syncing...'; syncIcon.innerText = '⏳'; }
-
-            // FIX: Find the canonical file ID. If multiple duplicates exist (old bug),
-            // we pick the most recently modified one and delete the rest.
-            const listRes = await fetch(
-                "https://www.googleapis.com/drive/v3/files?q=name='journal_data.json'&spaces=appDataFolder&fields=files(id,modifiedTime)&orderBy=modifiedTime+desc",
-                { headers: { Authorization: `Bearer ${accessToken}` } }
-            );
-            const { files } = await listRes.json();
-
-            // Clean up duplicate files left by the old bug
-            if (files.length > 1) {
-                for (let i = 1; i < files.length; i++) {
-                    await fetch(`https://www.googleapis.com/drive/v3/files/${files[i].id}`, {
-                        method: 'DELETE',
-                        headers: { Authorization: `Bearer ${accessToken}` }
-                    });
-                }
-            }
-
-            if (files.length > 0) {
-                driveFileId = files[0].id;
-                const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
-                    headers: { Authorization: `Bearer ${accessToken}` }
-                });
-                if (fileRes.ok) {
-                    const driveData = await fileRes.json();
-                    // driveData may be raw array (old format) or {notes, deletedIds} (new format)
-                    mergeNotes(driveData);
-                }
-            }
-
-            await uploadToDrive();
-
-            localStorage.setItem('auto_sync_enabled', 'true');
-            if (!silent) {
-                syncIcon.innerText = '✅';
-                syncText.innerText = 'Synced ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-            }
-        } catch (err) {
-            console.error('Sync error:', err);
-            if (!silent) { syncText.innerText = 'Sync Error'; syncIcon.innerText = '❌'; }
-        }
-    }
-
-    async function uploadToDrive() {
-        if (!accessToken) return;
-
-        // Build payload: include a set of deleted IDs so other devices can honour deletes
-        const localNotes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        const deletedIds = JSON.parse(localStorage.getItem('journal_deleted_ids') || '[]');
-        const payload = JSON.stringify({ notes: localNotes, deletedIds });
-
-        const boundary = 'sync_boundary_journal';
-        const delimiter = "\r\n--" + boundary + "\r\n";
-        const close_delim = "\r\n--" + boundary + "--";
-
-        // FIX: When driveFileId is null, search once more before creating to avoid duplicate files
-        if (!driveFileId) {
-            const checkRes = await fetch(
-                "https://www.googleapis.com/drive/v3/files?q=name='journal_data.json'&spaces=appDataFolder&fields=files(id)",
-                { headers: { Authorization: `Bearer ${accessToken}` } }
-            );
-            const { files } = await checkRes.json();
-            if (files.length > 0) driveFileId = files[0].id;
-        }
-
-        const metadata = driveFileId
-            ? {}  // No need to re-send name/parents on update
-            : { name: 'journal_data.json', parents: ['appDataFolder'] };
-
-        const multipartBody =
-            delimiter + 'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) +
-            delimiter + 'Content-Type: application/json\r\n\r\n' + payload +
-            close_delim;
-
-        const url = driveFileId
-            ? `https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=multipart`
-            : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
-
-        const res = await fetch(url, {
-            method: driveFileId ? 'PATCH' : 'POST',
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'Content-Type': 'multipart/related; boundary=' + boundary
-            },
-            body: multipartBody
-        });
-        if (!driveFileId) driveFileId = (await res.json()).id;
-    }
-
-    function mergeNotes(driveData) {
-        // Support both old format (plain array) and new format ({notes, deletedIds})
-        const driveNotes = Array.isArray(driveData) ? driveData : (driveData.notes || []);
-        const driveDeletedIds = new Set(Array.isArray(driveData) ? [] : (driveData.deletedIds || []));
-
-        const localNotes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        const localDeletedIds = new Set(JSON.parse(localStorage.getItem('journal_deleted_ids') || '[]'));
-
-        // Union of all known deleted IDs
-        const allDeletedIds = new Set([...localDeletedIds, ...driveDeletedIds]);
-
-        // Merge all notes, last-writer-wins on edits, then strip deleted
-        const mergedMap = new Map();
-        [...localNotes, ...driveNotes].forEach(note => {
-            const existing = mergedMap.get(note.id);
-            if (!existing || new Date(note.timestamp) > new Date(existing.timestamp)) {
-                mergedMap.set(note.id, note);
-            }
-        });
-
-        // Remove any note that has been deleted on any device
-        allDeletedIds.forEach(id => mergedMap.delete(id));
-
-        localStorage.setItem('journal_notes', JSON.stringify(Array.from(mergedMap.values())));
-        localStorage.setItem('journal_deleted_ids', JSON.stringify(Array.from(allDeletedIds)));
-
-        // Refresh UI if already viewing a day's notes
-        const currentTitle = document.getElementById('selected-date-title').innerText;
-        if (currentTitle.includes("Notes for")) {
-            showNotesForDay(currentTitle.split("Notes for ")[1].trim());
-        }
-        renderAll();
-    }
-
-    /* -------------------------------------------------------------------------- */
-    /* 3. ADHD FEATURES: STREAKS & FOCUS                                          */
-    /* -------------------------------------------------------------------------- */
-    function updateStreakUI() {
-        const streak = parseInt(localStorage.getItem('focus_streak') || '0');
-        const dots = document.querySelectorAll('.streak-dot');
-        const msg = document.getElementById('streak-message');
-        dots.forEach((dot, i) => dot.classList.toggle('filled', i < streak));
-        if (streak >= 3) {
-            msg.innerText = "🌟 Dopamine Hit! 3 in a row!";
-            msg.classList.remove('hidden');
-            document.getElementById('focus-section').classList.add('celebrate');
-            setTimeout(() => { 
-                localStorage.setItem('focus_streak', '0'); 
-                msg.classList.add('hidden'); 
-                document.getElementById('focus-section').classList.remove('celebrate'); 
-                updateStreakUI(); 
-            }, 5000);
-        }
-    }
-
-    function updateLiveTimer() {
-        const nudge = document.getElementById('time-blindness-nudge');
-        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        if (notes.length === 0) return;
-        const last = notes.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
-        const mins = Math.floor((new Date() - new Date(last.timestamp)) / 60000);
-        nudge.innerText = mins < 1 ? "✨ Just logged." : `⏳ ${mins}m since last entry.`;
-        const focusStart = localStorage.getItem('focus_start_time');
-        if (focusStart) document.getElementById('focus-timer').innerText = `${Math.floor((new Date() - new Date(focusStart)) / 60000)}m`;
-    }
-
-    function startFocus() {
-        const text = noteInput.value.trim();
-        if (!text) return alert("Focus goal?");
-        localStorage.setItem('current_focus', text);
-        localStorage.setItem('focus_start_time', new Date().toISOString());
-        noteInput.value = '';
-        renderFocus();
-        updateLiveTimer();
-    }
-
-    function completeFocus() {
-        const text = localStorage.getItem('current_focus'), start = localStorage.getItem('focus_start_time');
-        const dur = Math.floor((new Date() - new Date(start)) / 60000);
-        saveNote(`✅ Finished: ${text} (#focus for ${dur}m)`);
-        localStorage.setItem('focus_streak', (parseInt(localStorage.getItem('focus_streak') || '0') + 1).toString());
-        localStorage.removeItem('current_focus'); localStorage.removeItem('focus_start_time');
-        renderFocus(); updateStreakUI();
-    }
-
-    function renderFocus() {
-        const text = localStorage.getItem('current_focus');
-        const section = document.getElementById('focus-section');
-        if (text) { section.classList.remove('hidden'); document.getElementById('focus-text').innerText = text; }
-        else section.classList.add('hidden');
-    }
-
-    /* -------------------------------------------------------------------------- */
-    /* 4. CORE JOURNAL LOGIC (CRUD)                                               */
-    /* -------------------------------------------------------------------------- */
-    async function saveNote(manualText = null) {
-        const text = manualText || noteInput.value.trim();
-        if (!text) return;
-        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        notes.push({ id: Date.now(), timestamp: new Date().toISOString(), content: text, dateKey: getISODate(new Date()), tags: (text.match(/#(\w+)/g) || []).map(t => t.toLowerCase()) });
-        localStorage.setItem('journal_notes', JSON.stringify(notes));
-        if (!manualText) noteInput.value = '';
-        updateLiveTimer();
-        if (accessToken) await uploadToDrive();
-    }
-
-    function editNote(id) {
-        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        const idx = notes.findIndex(n => n.id === id);
-        if (idx === -1) return;
-        const newText = prompt("Update your note:", notes[idx].content);
-        if (newText !== null && newText.trim() !== "") {
-            notes[idx].content = newText;
-            notes[idx].timestamp = new Date().toISOString(); 
-            localStorage.setItem('journal_notes', JSON.stringify(notes));
-            showNotesForDay(notes[idx].dateKey);
-            if (accessToken) uploadToDrive();
-        }
-    }
-
-    function deleteNote(id) {
-        if(!confirm('Delete this permanently?')) return;
-        let notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.id !== id);
-        localStorage.setItem('journal_notes', JSON.stringify(notes));
-        // Record tombstone so other devices remove this note on next sync
-        const deletedIds = JSON.parse(localStorage.getItem('journal_deleted_ids') || '[]');
-        if (!deletedIds.includes(id)) deletedIds.push(id);
-        localStorage.setItem('journal_deleted_ids', JSON.stringify(deletedIds));
-        renderAll();
-        if (accessToken) uploadToDrive();
-    }
-
-    function toggleDarkMode() {
-        const isDark = document.body.classList.toggle('dark-mode');
-        localStorage.setItem('dark_mode', isDark);
-        document.getElementById('theme-icon').innerText = isDark ? '🌙' : '☀️';
-    }
-
-    /* -------------------------------------------------------------------------- */
-    /* 5. HISTORY & THREAD VIEW                                                   */
-    /* -------------------------------------------------------------------------- */
-    function formatDuration(ms) {
-        const mins = Math.floor(ms / 60000);
-        return mins < 1 ? "< 1m" : mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`;
-    }
-
-    function renderCalendar() {
-        const cal = document.getElementById('calendar'), month = currentMonth.getMonth(), year = currentMonth.getFullYear();
-        cal.innerHTML = '';
-        document.getElementById('month-display').innerText = new Intl.DateTimeFormat('en-US', {month:'long', year:'numeric'}).format(currentMonth);
-        const first = new Date(year, month, 1).getDay(), days = new Date(year, month + 1, 0).getDate();
-        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        const counts = notes.reduce((acc, n) => { acc[n.dateKey] = (acc[n.dateKey] || 0) + 1; return acc; }, {});
-
-        for(let i=0; i<first; i++) cal.appendChild(document.createElement('div'));
-        for(let d=1; d<=days; d++) {
-            const key = `${year}-${String(month+1).padStart(2, '0')}-${String(d).padStart(2, '0')}`, count = counts[key] || 0;
-            const el = document.createElement('div');
-            el.className = `calendar-day ${count > 0 ? 'lvl-' + Math.min(Math.ceil(count/2), 4) : ''}`;
-            el.innerText = d; el.onclick = () => showNotesForDay(key);
-            cal.appendChild(el);
-        }
-    }
-
-    function showNotesForDay(dateKey) {
-        const list = document.getElementById('notes-list'), notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        const filtered = notes.filter(n => n.dateKey === dateKey).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-        document.getElementById('selected-date-title').innerText = `Notes for ${dateKey}`;
-        
-        let html = '';
-        filtered.forEach((n, i) => {
-            if (i > 0) html += `<div class="time-gap-container"><div class="duration-badge">⏱️ ${formatDuration(new Date(n.timestamp) - new Date(filtered[i-1].timestamp))} gap</div></div>`;
-            html += `
-                <div class="note-item">
-                    <small>${new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small>
-                    <div style="margin:10px 0; font-size: 1.05rem;">${n.content.replace(/\n/g, '<br>')}</div>
-                    <div class="note-actions">
-                        <button class="action-link edit-link" onclick="window.editNote(${n.id})">Edit</button> 
-                        <button class="action-link delete-link" onclick="window.deleteNote(${n.id})">Delete</button>
-                    </div>
-                </div>`;
-        });
-        list.innerHTML = html || '<p>No entries.</p>';
-        document.getElementById('llm-controls').style.display = filtered.length > 0 ? 'block' : 'none';
-        renderCalendar();
-    }
-
-    /* -------------------------------------------------------------------------- */
-    /* 6. AI, SEARCH & STORAGE                                                    */
-    /* -------------------------------------------------------------------------- */
-    async function generateDailySummary() {
-        if (!engine) {
-            const webllm = await import("https://esm.run/@mlc-ai/web-llm");
-            engine = await webllm.CreateMLCEngine(modelId, { initProgressCallback: (r) => document.getElementById('llm-status').innerText = r.text });
-        }
-        const noteTexts = Array.from(document.querySelectorAll('.note-item div')).map(el => el.innerText).join("\n- ");
-        const res = await engine.chat.completions.create({ messages: [{ role: "system", content: "You are an ADHD coach. Identify wins today to reduce anxiety." }, { role: "user", content: noteTexts }] });
-        document.getElementById('daily-summary-output').innerText = res.choices[0].message.content;
-    }
-
-    function searchNotes() {
-        const query = document.getElementById('search-input').value.toLowerCase();
-        const list = document.getElementById('notes-list'), cal = document.getElementById('calendar'), title = document.getElementById('selected-date-title');
-        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        if (!query) { cal.style.display = 'grid'; list.innerHTML = ''; title.innerText = ''; return; }
-        cal.style.display = 'none'; title.innerText = `Search: "${query}"`;
-        const filtered = notes.filter(n => n.content.toLowerCase().includes(query)).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-        list.innerHTML = filtered.map(n => `<div class="note-item"><small>${n.dateKey}</small><div>${n.content.replace(new RegExp(query, 'gi'), m => `<mark>${m}</mark>`)}</div></div>`).join('');
-    }
-
-    function renderTagCloud() {
-        const cloud = document.getElementById('tag-cloud');
-        const tags = [...new Set(JSON.parse(localStorage.getItem('journal_notes') || '[]').flatMap(n => n.tags || []))];
-        cloud.innerHTML = tags.map(t => `<span class="tag" onclick="window.filterByTag('${t}')">${t}</span>`).join('');
-    }
-
-    function filterByTag(tag) {
-        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.tags.includes(tag));
-        document.getElementById('calendar').style.display = 'none';
-        document.getElementById('selected-date-title').innerText = `Tag: #${tag}`;
-        document.getElementById('notes-list').innerHTML = notes.map(n => `<div class="note-item"><small>${n.dateKey}</small><div>${n.content}</div></div>`).join('');
-    }
-
-    function showPage(pageId) {
-        document.getElementById('home-page').classList.toggle('hidden', pageId !== 'home-page');
-        document.getElementById('history-page').classList.toggle('hidden', pageId !== 'history-page');
-        document.getElementById('nav-write').classList.toggle('active', pageId === 'home-page');
-        document.getElementById('nav-history').classList.toggle('active', pageId === 'history-page');
-        if (pageId === 'history-page') { renderAll(); document.getElementById('notes-list').innerHTML = ''; document.getElementById('calendar').style.display = 'grid'; }
-    }
-
-    function renderAll() { renderTagCloud(); renderCalendar(); }
-    function changeMonth(dir) { currentMonth.setMonth(currentMonth.getMonth() + dir); renderCalendar(); }
-    function exportNotes() { const b = new Blob([localStorage.getItem('journal_notes')], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'journal.json'; a.click(); }
-    function importNotes(e) { const r = new FileReader(); r.onload = (ev) => { localStorage.setItem('journal_notes', ev.target.result); renderAll(); alert('Imported!'); }; r.readAsText(e.target.files[0]); }
-
-    /* -------------------------------------------------------------------------- */
-    /* 7. INITIALIZATION                                                          */
-    /* -------------------------------------------------------------------------- */
-    Object.assign(window, { 
-        showPage, toggleDarkMode, saveNote, deleteNote, editNote, exportNotes, importNotes,
-        changeMonth, handleAuthClick, startFocus, completeFocus, filterByTag, searchNotes, generateDailySummary
+        modalConfirm.className = `modal-btn ${isDanger ? 'modal-btn-danger' : 'modal-btn-confirm'}`;
+        modalConfirm.textContent = isDanger ? 'Delete' : 'Save';
+        modalOverlay.classList.add('visible');
     });
+}
+function closeModal(result) {
+    modalOverlay.classList.remove('visible');
+    if (_modalResolve) { _modalResolve(result); _modalResolve = null; }
+}
+modalConfirm.addEventListener('click', () =>
+    closeModal(modalTextarea.classList.contains('hidden') ? true : modalTextarea.value.trim())
+);
+modalCancel.addEventListener('click', () => closeModal(null));
+modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) closeModal(null); });
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && modalOverlay.classList.contains('visible')) closeModal(null);
+});
 
-    window.addEventListener('load', () => initGIS());
+/* =============================================================================
+ * TOAST
+ * ============================================================================= */
+const toastEl = document.getElementById('toast');
+let _toastTimer = null;
+function showToast(msg, ms = 2600) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
+}
 
-    (function init() {
-        renderFocus(); updateLiveTimer(); updateStreakUI(); setInterval(updateLiveTimer, 30000);
-        
-        const isDark = localStorage.getItem('dark_mode') !== 'false';
-        document.body.classList.toggle('dark-mode', isDark);
-        document.getElementById('theme-icon').innerText = isDark ? '🌙' : '☀️';
+/* =============================================================================
+ * 1. CONFIG & STATE
+ * =============================================================================
+ * SECURITY NOTE: CLIENT_ID is a public identifier, not a secret. It must be
+ * registered in Google Cloud Console with the exact allowed origin. The
+ * drive.appdata scope is strictly app-sandboxed — this app cannot read any
+ * other file in the user's Drive.
+ * ============================================================================= */
+const CLIENT_ID = '629370111704-m36nu5qgi52071qgp0sfsbs5sa9ac80k.apps.googleusercontent.com';
+const SCOPES    = 'https://www.googleapis.com/auth/drive.appdata';
 
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/InterstitialJournal/sw.js').then(reg => {
-                reg.onupdatefound = () => {
-                    const install = reg.installing;
-                    install.onstatechange = () => { if (install.state === 'installed' && navigator.serviceWorker.controller) window.location.reload(); };
-                };
-            }).catch(err => console.error("SW registration failed:", err));
+let tokenClient = null;
+let accessToken = null;   // Lives in memory only, never persisted
+let driveFileId = null;
+let syncInterval = null;
+let isSyncing    = false; // Mutex: prevents concurrent overlapping syncs
+
+let currentMonth = new Date();
+const noteInput  = document.getElementById('note-input');
+const charCounter = document.getElementById('char-counter');
+let engine = null;
+const modelId = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+
+const getISODate = d => {
+    const dt = new Date(d);
+    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+};
+
+/* =============================================================================
+ * 2. GOOGLE DRIVE SYNC
+ * ============================================================================= */
+function initGIS() {
+    if (!window.google?.accounts) { setTimeout(initGIS, 500); return; }
+    tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: async (response) => {
+            if (response.error) { updateSyncUI('❌', 'Auth Error'); return; }
+            accessToken = response.access_token;
+            // Clear token before it expires (~1 h for Google OAuth tokens)
+            setTimeout(() => { accessToken = null; }, 55 * 60 * 1000);
+            await syncWithDrive();
+            startPeriodicSync();
+        },
+    });
+    // Silently restore session for returning users — no interaction required
+    if (localStorage.getItem('auto_sync_enabled') === 'true') {
+        tokenClient.requestAccessToken({ prompt: '' });
+    }
+}
+
+function startPeriodicSync() {
+    if (syncInterval) return;
+    syncInterval = setInterval(async () => {
+        if (accessToken && !isSyncing) await syncWithDrive(true);
+    }, 3 * 60 * 1000);
+}
+
+async function handleAuthClick() {
+    if (!tokenClient) { showToast('Google Sign-In not ready yet'); return; }
+    if (!accessToken) {
+        const hadPrior = localStorage.getItem('auto_sync_enabled') === 'true';
+        tokenClient.requestAccessToken({ prompt: hadPrior ? '' : 'select_account' });
+    } else {
+        await syncWithDrive();
+    }
+}
+
+function updateSyncUI(icon, text) {
+    document.getElementById('sync-icon').textContent = icon;
+    document.getElementById('sync-text').textContent = text;
+}
+
+/**
+ * Thin fetch wrapper that enforces googleapis.com as the only allowed host.
+ * SECURITY: Prevents token leakage if a URL were ever constructed from
+ * user-controlled data (defence in depth).
+ */
+async function apiFetch(url, method = 'GET', body, extraHeaders = {}) {
+    const { hostname } = new URL(url);
+    if (!hostname.endsWith('googleapis.com')) throw new Error(`Blocked: ${hostname}`);
+    return fetch(url, {
+        method,
+        headers: { Authorization: `Bearer ${accessToken}`, ...extraHeaders },
+        ...(body !== undefined && { body }),
+    });
+}
+
+async function syncWithDrive(silent = false) {
+    if (isSyncing) return;
+    isSyncing = true;
+    try {
+        if (!silent) updateSyncUI('⏳', 'Syncing…');
+
+        // List files sorted newest-first; fields param minimises payload
+        const listRes = await apiFetch(
+            `https://www.googleapis.com/drive/v3/files?q=name%3D'journal_data.json'&spaces=appDataFolder&fields=files(id%2CmodifiedTime)&orderBy=modifiedTime+desc`
+        );
+        if (!listRes.ok) throw new Error(`Drive list: ${listRes.status}`);
+        const { files } = await listRes.json();
+
+        // Purge duplicate files left by the old single-device bug
+        if (Array.isArray(files) && files.length > 1) {
+            await Promise.all(
+                files.slice(1).map(f =>
+                    apiFetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(f.id)}`, 'DELETE')
+                )
+            );
         }
-    })();
+
+        if (Array.isArray(files) && files.length > 0) {
+            driveFileId = files[0].id;
+            const fileRes = await apiFetch(
+                `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media`
+            );
+            if (fileRes.ok) {
+                const driveData = await fileRes.json();
+                mergeNotes(driveData); // validation happens inside mergeNotes
+            }
+        }
+
+        await uploadToDrive();
+        localStorage.setItem('auto_sync_enabled', 'true');
+        if (!silent) {
+            updateSyncUI('✅', 'Synced ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+            showToast('✅ Synced with Google Drive');
+        }
+    } catch (err) {
+        console.error('Sync error:', err);
+        if (!silent) updateSyncUI('❌', 'Sync Error');
+    } finally {
+        isSyncing = false;
+    }
+}
+
+async function uploadToDrive() {
+    if (!accessToken) return;
+
+    // Avoid creating a duplicate file when driveFileId is unknown
+    if (!driveFileId) {
+        const checkRes = await apiFetch(
+            `https://www.googleapis.com/drive/v3/files?q=name%3D'journal_data.json'&spaces=appDataFolder&fields=files(id)`
+        );
+        if (checkRes.ok) {
+            const { files } = await checkRes.json();
+            if (Array.isArray(files) && files.length > 0) driveFileId = files[0].id;
+        }
+    }
+
+    const payload  = JSON.stringify({ notes: getLocalNotes(), deletedIds: getDeletedIds() });
+    const metadata = driveFileId ? {} : { name: 'journal_data.json', parents: ['appDataFolder'] };
+    const boundary = 'journal_sync_v1';
+    const body =
+        `\r\n--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` + JSON.stringify(metadata) +
+        `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` + payload +
+        `\r\n--${boundary}--`;
+
+    const url = driveFileId
+        ? `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(driveFileId)}?uploadType=multipart`
+        : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+
+    const res = await apiFetch(url, driveFileId ? 'PATCH' : 'POST', body, {
+        'Content-Type': `multipart/related; boundary=${boundary}`,
+    });
+    if (!driveFileId && res.ok) driveFileId = (await res.json()).id;
+}
+
+function mergeNotes(driveData) {
+    // Backwards-compatible with the old plain-array format
+    const rawDriveNotes   = Array.isArray(driveData) ? driveData : (driveData?.notes ?? []);
+    const rawDriveDeleted = Array.isArray(driveData) ? [] : (driveData?.deletedIds ?? []);
+
+    // SECURITY: validate every note arriving from Drive before touching localStorage
+    const driveNotes   = rawDriveNotes.map(validateNote).filter(Boolean);
+    const driveDeleted = rawDriveDeleted.map(sanitiseId).filter(Boolean);
+
+    const localNotes   = getLocalNotes();
+    const localDeleted = getDeletedIds();
+    const allDeleted   = new Set([...localDeleted, ...driveDeleted]);
+
+    // Last-writer-wins merge
+    const merged = new Map();
+    [...localNotes, ...driveNotes].forEach(n => {
+        const ex = merged.get(n.id);
+        if (!ex || new Date(n.timestamp) > new Date(ex.timestamp)) merged.set(n.id, n);
+    });
+    allDeleted.forEach(id => merged.delete(id));
+
+    setLocalNotes(Array.from(merged.values()));
+    setDeletedIds(Array.from(allDeleted));
+
+    const titleEl = document.getElementById('selected-date-title');
+    if (titleEl.textContent.startsWith('Notes for ')) {
+        showNotesForDay(titleEl.textContent.replace('Notes for ', '').trim());
+    }
+    renderAll();
+}
+
+/* =============================================================================
+ * 3. ADHD FEATURES
+ * ============================================================================= */
+function updateStreakUI() {
+    const streak = Math.min(parseInt(localStorage.getItem('focus_streak') || '0', 10), 100);
+    document.querySelectorAll('.streak-dot').forEach((dot, i) =>
+        dot.classList.toggle('filled', i < streak)
+    );
+    const msg = document.getElementById('streak-message');
+    if (streak >= 3) {
+        msg.textContent = '🌟 Dopamine Hit! 3 in a row!';
+        msg.classList.remove('hidden');
+        document.getElementById('focus-section').classList.add('celebrate');
+        setTimeout(() => {
+            localStorage.setItem('focus_streak', '0');
+            msg.classList.add('hidden');
+            document.getElementById('focus-section').classList.remove('celebrate');
+            updateStreakUI();
+        }, 5000);
+    }
+}
+
+function updateLiveTimer() {
+    const nudge = document.getElementById('time-blindness-nudge');
+    const notes = getLocalNotes();
+    if (notes.length > 0) {
+        const last = notes.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+        const mins = Math.floor((Date.now() - new Date(last.timestamp)) / 60000);
+        nudge.textContent = mins < 1 ? '✨ Just logged.' : `⏳ ${mins}m since last entry.`;
+    }
+    const focusStart = localStorage.getItem('focus_start_time');
+    if (focusStart) {
+        document.getElementById('focus-timer').textContent =
+            `${Math.floor((Date.now() - new Date(focusStart)) / 60000)}m`;
+    }
+}
+
+async function startFocus() {
+    const text = noteInput.value.trim();
+    if (!text) { showToast('Enter a focus goal first'); return; }
+    // SECURITY: store raw text; rendered via textContent not innerHTML
+    localStorage.setItem('current_focus', text.slice(0, 200));
+    localStorage.setItem('focus_start_time', new Date().toISOString());
+    noteInput.value = '';
+    charCounter.textContent = '0 / 5000';
+    charCounter.classList.remove('warn');
+    renderFocus();
+    updateLiveTimer();
+}
+
+async function completeFocus() {
+    const text  = localStorage.getItem('current_focus');
+    const start = localStorage.getItem('focus_start_time');
+    if (!text || !start) return;
+    const dur = Math.floor((Date.now() - new Date(start)) / 60000);
+    await saveNote(`✅ Finished: ${text} (#focus for ${dur}m)`);
+    const streak = parseInt(localStorage.getItem('focus_streak') || '0', 10);
+    localStorage.setItem('focus_streak', String(streak + 1));
+    localStorage.removeItem('current_focus');
+    localStorage.removeItem('focus_start_time');
+    renderFocus();
+    updateStreakUI();
+}
+
+function renderFocus() {
+    const text = localStorage.getItem('current_focus');
+    const section = document.getElementById('focus-section');
+    if (text) {
+        section.classList.remove('hidden');
+        // SECURITY: textContent — user data never goes into innerHTML
+        document.getElementById('focus-text').textContent = text;
+    } else {
+        section.classList.add('hidden');
+    }
+}
+
+/* =============================================================================
+ * 4. CRUD
+ * ============================================================================= */
+async function saveNote(manualText = null) {
+    const text = manualText || noteInput.value.trim();
+    if (!text) return;
+    if (text.length > 5000) { showToast('Note too long (max 5000 chars)'); return; }
+
+    const newNote = validateNote({
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        content: text,
+        dateKey: getISODate(new Date()),
+        tags: (text.match(/#(\w+)/g) || []).map(t => t.toLowerCase()),
+    });
+    if (!newNote) return;
+
+    const notes = getLocalNotes();
+    notes.push(newNote);
+    setLocalNotes(notes);
+
+    if (!manualText) {
+        noteInput.value = '';
+        charCounter.textContent = '0 / 5000';
+        charCounter.classList.remove('warn');
+    }
+    updateLiveTimer();
+    if (accessToken) await uploadToDrive();
+    showToast('Note saved ✓');
+}
+
+async function editNote(id) {
+    const safeId = sanitiseId(id);
+    if (!safeId) return;
+    const notes = getLocalNotes();
+    const idx   = notes.findIndex(n => n.id === safeId);
+    if (idx === -1) return;
+
+    // SECURITY: custom modal — no prompt()
+    const newText = await showModal({ title: 'Edit Note', defaultValue: notes[idx].content });
+    if (!newText || typeof newText !== 'string' || !newText.trim()) return;
+    if (newText.length > 5000) { showToast('Note too long (max 5000 chars)'); return; }
+
+    notes[idx].content   = newText.trim();
+    notes[idx].timestamp = new Date().toISOString();
+    notes[idx].tags      = (newText.match(/#(\w+)/g) || []).map(t => t.toLowerCase());
+    setLocalNotes(notes);
+    showNotesForDay(notes[idx].dateKey);
+    if (accessToken) await uploadToDrive();
+}
+
+async function deleteNote(id) {
+    const safeId = sanitiseId(id);
+    if (!safeId) return;
+
+    // SECURITY: custom modal — no confirm()
+    const confirmed = await showModal({
+        title: 'Delete Note',
+        message: 'Delete this entry permanently? This cannot be undone.',
+        isDanger: true,
+    });
+    if (!confirmed) return;
+
+    const notes = getLocalNotes().filter(n => n.id !== safeId);
+    setLocalNotes(notes);
+
+    // Tombstone so other devices honour this deletion on next sync
+    const deleted = getDeletedIds();
+    if (!deleted.includes(safeId)) deleted.push(safeId);
+    setDeletedIds(deleted);
+
+    renderAll();
+    document.getElementById('notes-list').innerHTML = '';
+    document.getElementById('selected-date-title').textContent = '';
+    document.getElementById('llm-controls').style.display = 'none';
+    if (accessToken) await uploadToDrive();
+    showToast('Note deleted');
+}
+
+function toggleDarkMode() {
+    const isDark = document.body.classList.toggle('dark-mode');
+    localStorage.setItem('dark_mode', String(isDark));
+    document.getElementById('theme-icon').textContent = isDark ? '🌙' : '☀️';
+}
+
+/* =============================================================================
+ * 5. CALENDAR & HISTORY
+ * ============================================================================= */
+function formatDuration(ms) {
+    const m = Math.floor(ms / 60000);
+    return m < 1 ? '< 1m' : m < 60 ? `${m}m` : `${Math.floor(m/60)}h ${m%60}m`;
+}
+
+function renderCalendar() {
+    const cal   = document.getElementById('calendar');
+    const month = currentMonth.getMonth();
+    const year  = currentMonth.getFullYear();
+    cal.innerHTML = '';
+    document.getElementById('month-display').textContent =
+        new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(currentMonth);
+
+    const counts = getLocalNotes().reduce((acc, n) => {
+        acc[n.dateKey] = (acc[n.dateKey] || 0) + 1; return acc;
+    }, {});
+
+    const firstDay    = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    for (let i = 0; i < firstDay; i++) cal.appendChild(document.createElement('div'));
+    for (let d = 1; d <= daysInMonth; d++) {
+        const key   = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const count = counts[key] || 0;
+        const btn   = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `calendar-day${count > 0 ? ' lvl-' + Math.min(Math.ceil(count/2), 4) : ''}`;
+        btn.textContent = d;
+        btn.setAttribute('aria-label', `${key}${count > 0 ? `, ${count} note${count > 1 ? 's' : ''}` : ''}`);
+        btn.addEventListener('click', () => showNotesForDay(key));
+        cal.appendChild(btn);
+    }
+}
+
+function showNotesForDay(dateKey) {
+    // Validate format to prevent injection via crafted dateKey
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
+
+    const list     = document.getElementById('notes-list');
+    const notes    = getLocalNotes();
+    const filtered = notes
+        .filter(n => n.dateKey === dateKey)
+        .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // SECURITY: textContent — never innerHTML for dynamic values
+    document.getElementById('selected-date-title').textContent = `Notes for ${dateKey}`;
+    list.innerHTML = '';
+
+    if (filtered.length === 0) {
+        const p = document.createElement('p');
+        p.textContent = 'No entries.';
+        list.appendChild(p);
+    } else {
+        filtered.forEach((n, i) => {
+            if (i > 0) {
+                const gap = document.createElement('div');
+                gap.className = 'time-gap-container';
+                const badge = document.createElement('div');
+                badge.className = 'duration-badge';
+                badge.textContent = `⏱️ ${formatDuration(new Date(n.timestamp) - new Date(filtered[i-1].timestamp))} gap`;
+                gap.appendChild(badge);
+                list.appendChild(gap);
+            }
+
+            const card = document.createElement('div');
+            card.className = 'note-item';
+
+            const time = document.createElement('small');
+            time.textContent = new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+
+            // SECURITY: split on newlines and use text nodes — never innerHTML
+            const contentDiv = document.createElement('div');
+            contentDiv.style.cssText = 'margin:10px 0;font-size:1.05rem;';
+            n.content.split('\n').forEach((line, li) => {
+                if (li > 0) contentDiv.appendChild(document.createElement('br'));
+                contentDiv.appendChild(document.createTextNode(line));
+            });
+
+            const actions = document.createElement('div');
+            actions.className = 'note-actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'action-link edit-link';
+            editBtn.textContent = 'Edit';
+            editBtn.addEventListener('click', () => editNote(n.id));
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'action-link delete-link';
+            delBtn.textContent = 'Delete';
+            delBtn.addEventListener('click', () => deleteNote(n.id));
+
+            actions.append(editBtn, delBtn);
+            card.append(time, contentDiv, actions);
+            list.appendChild(card);
+        });
+    }
+
+    document.getElementById('llm-controls').style.display = filtered.length > 0 ? 'block' : 'none';
+    renderCalendar();
+}
+
+/* =============================================================================
+ * 6. AI SUMMARY
+ * ============================================================================= */
+async function generateDailySummary() {
+    const btn    = document.getElementById('summarize-btn');
+    const status = document.getElementById('llm-status');
+    const output = document.getElementById('daily-summary-output');
+    btn.disabled = true;
+    try {
+        if (!engine) {
+            const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+            engine = await webllm.CreateMLCEngine(modelId, {
+                initProgressCallback: r => { status.textContent = r.text; }
+            });
+        }
+        // SECURITY: collect text via textContent (DOM nodes already safe), not innerHTML
+        const noteTexts = Array.from(document.querySelectorAll('#notes-list .note-item div'))
+            .map(el => el.textContent).join('\n- ');
+
+        const res = await engine.chat.completions.create({
+            messages: [
+                { role: 'system', content: 'You are an ADHD coach. Identify wins today to reduce anxiety. Be concise.' },
+                { role: 'user', content: noteTexts }
+            ]
+        });
+        // SECURITY: LLM output is untrusted — textContent only
+        output.textContent = res.choices[0].message.content;
+        status.textContent = '';
+    } catch (err) {
+        status.textContent = `Error loading model: ${err.message}`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+/* =============================================================================
+ * 7. SEARCH & TAGS
+ * ============================================================================= */
+function searchNotes() {
+    const rawQuery = document.getElementById('search-input').value.slice(0, 200);
+    const query    = rawQuery.toLowerCase();
+    const list     = document.getElementById('notes-list');
+    const cal      = document.getElementById('calendar');
+    const title    = document.getElementById('selected-date-title');
+
+    if (!query) {
+        cal.style.display = 'grid'; list.innerHTML = ''; title.textContent = ''; return;
+    }
+    cal.style.display = 'none';
+    title.textContent = `Search: "${rawQuery.slice(0, 50)}"`;
+
+    const filtered = getLocalNotes()
+        .filter(n => n.content.toLowerCase().includes(query))
+        .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    list.innerHTML = '';
+    filtered.forEach(n => {
+        const card = document.createElement('div');
+        card.className = 'note-item';
+        const dateEl = document.createElement('small');
+        dateEl.textContent = n.dateKey;
+
+        // SECURITY: Highlight via DOM manipulation, not string replace + innerHTML
+        const contentDiv = document.createElement('div');
+        const lower      = n.content.toLowerCase();
+        let last = 0, pos;
+        while ((pos = lower.indexOf(query, last)) !== -1) {
+            if (pos > last) contentDiv.appendChild(document.createTextNode(n.content.slice(last, pos)));
+            const mark = document.createElement('mark');
+            mark.textContent = n.content.slice(pos, pos + query.length);
+            contentDiv.appendChild(mark);
+            last = pos + query.length;
+        }
+        if (last < n.content.length) contentDiv.appendChild(document.createTextNode(n.content.slice(last)));
+
+        card.append(dateEl, contentDiv);
+        list.appendChild(card);
+    });
+    if (filtered.length === 0) {
+        const p = document.createElement('p'); p.textContent = 'No notes match your search.'; list.appendChild(p);
+    }
+}
+
+function renderTagCloud() {
+    const cloud = document.getElementById('tag-cloud');
+    const tags  = [...new Set(getLocalNotes().flatMap(n => n.tags || []))];
+    cloud.innerHTML = '';
+    tags.forEach(t => {
+        const btn = document.createElement('button');
+        btn.className = 'tag';
+        btn.textContent = t; // tags are pre-validated as /^#\w+$/
+        btn.addEventListener('click', () => filterByTag(t));
+        cloud.appendChild(btn);
+    });
+}
+
+function filterByTag(tag) {
+    if (!/^#\w+$/.test(tag)) return; // SECURITY: re-validate
+    const notes = getLocalNotes().filter(n => n.tags.includes(tag));
+    document.getElementById('calendar').style.display = 'none';
+    document.getElementById('selected-date-title').textContent = `Tag: ${tag}`;
+    const list = document.getElementById('notes-list');
+    list.innerHTML = '';
+    notes.forEach(n => {
+        const card = document.createElement('div');
+        card.className = 'note-item';
+        const dateEl = document.createElement('small'); dateEl.textContent = n.dateKey;
+        const body   = document.createElement('div');   body.textContent   = n.content;
+        card.append(dateEl, body);
+        list.appendChild(card);
+    });
+}
+
+/* =============================================================================
+ * 8. NAVIGATION & UTILITIES
+ * ============================================================================= */
+function showPage(pageId) {
+    if (!['home-page', 'history-page'].includes(pageId)) return;
+    document.getElementById('home-page').classList.toggle('hidden', pageId !== 'home-page');
+    document.getElementById('history-page').classList.toggle('hidden', pageId !== 'history-page');
+    document.getElementById('nav-write').classList.toggle('active', pageId === 'home-page');
+    document.getElementById('nav-history').classList.toggle('active', pageId === 'history-page');
+    if (pageId === 'history-page') {
+        renderAll();
+        document.getElementById('notes-list').innerHTML = '';
+        document.getElementById('calendar').style.display = 'grid';
+    }
+}
+
+function renderAll() { renderTagCloud(); renderCalendar(); }
+function changeMonth(dir) { currentMonth.setMonth(currentMonth.getMonth() + dir); renderCalendar(); }
+
+function exportNotes() {
+    const blob = new Blob([JSON.stringify(getLocalNotes(), null, 2)], { type: 'application/json' });
+    const a    = Object.assign(document.createElement('a'), {
+        href:     URL.createObjectURL(blob),
+        download: `journal-${getISODate(new Date())}.json`,
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+function importNotes(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 1_000_000) { showToast('File too large (max 1 MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = ev => {
+        const parsed = safeJSON(ev.target.result, null);
+        if (!Array.isArray(parsed)) { showToast('Invalid journal file'); return; }
+        const valid = parsed.map(validateNote).filter(Boolean);
+        if (valid.length === 0) { showToast('No valid notes found'); return; }
+        setLocalNotes(valid);
+        renderAll();
+        showToast(`Imported ${valid.length} notes ✓`);
+        e.target.value = ''; // Reset so same file can be re-imported
+    };
+    reader.readAsText(file);
+}
+
+/* =============================================================================
+ * 9. EVENT WIRING
+ * All handlers via addEventListener — no inline onclick attributes.
+ * This keeps the CSP tight and avoids global namespace pollution.
+ * ============================================================================= */
+document.getElementById('save-btn').addEventListener('click', () => saveNote());
+document.getElementById('focus-btn').addEventListener('click', startFocus);
+document.getElementById('complete-focus-btn').addEventListener('click', completeFocus);
+document.getElementById('nav-write').addEventListener('click', () => showPage('home-page'));
+document.getElementById('nav-history').addEventListener('click', () => showPage('history-page'));
+document.getElementById('nav-sync').addEventListener('click', handleAuthClick);
+document.getElementById('nav-theme').addEventListener('click', toggleDarkMode);
+document.getElementById('prev-month-btn').addEventListener('click', () => changeMonth(-1));
+document.getElementById('next-month-btn').addEventListener('click', () => changeMonth(1));
+document.getElementById('export-btn').addEventListener('click', exportNotes);
+document.getElementById('import-file').addEventListener('change', importNotes);
+document.getElementById('search-input').addEventListener('input', searchNotes);
+document.getElementById('summarize-btn').addEventListener('click', generateDailySummary);
+
+// Live character counter
+noteInput.addEventListener('input', () => {
+    const len = noteInput.value.length;
+    charCounter.textContent = `${len} / 5000`;
+    charCounter.classList.toggle('warn', len >= 4500);
+});
+
+// Keyboard shortcut: Ctrl/Cmd + Enter to save
+noteInput.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') saveNote();
+});
+
+/* =============================================================================
+ * 10. INIT
+ * ============================================================================= */
+window.addEventListener('load', initGIS);
+
+(function init() {
+    renderFocus();
+    updateLiveTimer();
+    updateStreakUI();
+    setInterval(updateLiveTimer, 30000);
+
+    // Dark mode: default dark; respect explicit saved preference
+    const saved  = localStorage.getItem('dark_mode');
+    const isDark = saved === null ? true : saved !== 'false';
+    document.body.classList.toggle('dark-mode', isDark);
+    document.getElementById('theme-icon').textContent = isDark ? '🌙' : '☀️';
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/InterstitialJournal/sw.js')
+            .then(reg => {
+                reg.onupdatefound = () => {
+                    const sw = reg.installing;
+                    sw.onstatechange = () => {
+                        if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+                            showToast('Update available — refresh to apply', 5000);
+                        }
+                    };
+                };
+            })
+            .catch(err => console.error('SW registration failed:', err));
+    }
+})();
 </script>
 </body>
 </html>
