@@ -1,7 +1,7 @@
 {
     "name": "Interstitial Journal",
     "short_name": "Journal",
-    "start_url": "index.html",
+    "start_url": "/InterstitialJournal/index.html",
     "display": "standalone",
     "background_color": "#ffffff",
     "theme_color": "#007aff",
