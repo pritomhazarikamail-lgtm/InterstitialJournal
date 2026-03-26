@@ -42,11 +42,18 @@
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <title>Interstitial Journal</title>
 
+    <!-- PWA / home-screen install hints -->
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#007aff">
+    <meta name="apple-mobile-web-app-title" content="Journal">
+    <!-- theme-color: dark default; a light value is set dynamically via JS -->
+    <meta name="theme-color" id="theme-color-meta" content="#111010">
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="journal_icon.png">
+    <!-- Apple touch icons at common sizes for best quality on all devices -->
+    <link rel="apple-touch-icon" sizes="180x180" href="journal_icon.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="journal_icon.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="journal_icon.png">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -896,6 +903,24 @@
 
 <div id="toast" role="status" aria-live="polite"></div>
 
+<!-- PWA install banner — shown only when browser fires beforeinstallprompt (Android Chrome) -->
+<div id="install-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9500;
+     background:var(--card-bg);border-top:1px solid var(--border);padding:14px 20px calc(14px + env(safe-area-inset-bottom));
+     display:none;flex-direction:column;gap:10px;box-shadow:0 -8px 24px rgba(0,0,0,0.12);">
+    <div style="display:flex;align-items:center;gap:12px;">
+        <img src="journal_icon.png" width="40" height="40" style="border-radius:10px;flex-shrink:0;" alt="">
+        <div>
+            <div style="font-weight:700;font-size:0.9rem;">Add to Home Screen</div>
+            <div style="font-size:0.78rem;color:var(--muted);">Install for the best offline experience</div>
+        </div>
+        <button id="install-dismiss" aria-label="Dismiss"
+            style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:1.2rem;color:var(--muted);padding:4px;">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;">
+        <button id="install-btn" class="primary-btn" style="flex:1;padding:11px;">📲 Install App</button>
+    </div>
+</div>
+
 <div class="container">
     <div id="home-page">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border);">
@@ -1076,11 +1101,23 @@ function safeJSON(str, fallback) {
     try { return JSON.parse(str) ?? fallback; } catch { return fallback; }
 }
 
+/* ── Notes cache: avoids re-parsing localStorage on every render ── */
+let _notesCache    = null;  // null = dirty
+let _notesCacheKey = '';    // localStorage string snapshot for cache invalidation
+
 function getLocalNotes() {
-    const raw = safeJSON(localStorage.getItem('journal_notes'), []);
-    return Array.isArray(raw) ? raw.map(validateNote).filter(Boolean) : [];
+    const raw = localStorage.getItem('journal_notes') || '[]';
+    if (_notesCache !== null && _notesCacheKey === raw) return _notesCache;
+    const parsed = safeJSON(raw, []);
+    _notesCache    = Array.isArray(parsed) ? parsed.map(validateNote).filter(Boolean) : [];
+    _notesCacheKey = raw;
+    return _notesCache;
 }
-function setLocalNotes(notes) { localStorage.setItem('journal_notes', JSON.stringify(notes)); }
+function _invalidateNotesCache() { _notesCache = null; _notesCacheKey = ''; }
+function setLocalNotes(notes) {
+    localStorage.setItem('journal_notes', JSON.stringify(notes));
+    _invalidateNotesCache();
+}
 
 function getDeletedIds() {
     const raw = safeJSON(localStorage.getItem('journal_deleted_ids'), []);
@@ -1327,9 +1364,19 @@ nextUpInput.addEventListener('input', () => {
 function renderRecentStrip() {
     const strip    = document.getElementById('recent-strip');
     const listEl   = document.getElementById('recent-notes-list');
-    const allNotes = getLocalNotes()
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        .slice(0, 3);
+    // Partial sort: find the 3 most recent in O(n) rather than sorting all
+    const allNotes = (() => {
+        const ns = getLocalNotes();
+        const top3 = [];
+        for (const n of ns) {
+            top3.push(n);
+            if (top3.length > 3) {
+                top3.sort((a,b) => b.timestamp > a.timestamp ? 1 : -1);
+                top3.pop();
+            }
+        }
+        return top3.sort((a,b) => b.timestamp > a.timestamp ? 1 : -1);
+    })();
 
     listEl.innerHTML = '';
     if (allNotes.length === 0) { strip.style.display = 'none'; return; }
@@ -1552,10 +1599,19 @@ const POMO_CIRC       = 326.73;   // 2π × r=52
 let _pomoTick        = null;   // setInterval handle — null when stopped
 let _pomoPhaseEnding = false;  // re-entrance guard
 
-/* ── Audio tone (no external files needed) ─────────────────────────────── */
+/* ── Audio tone — reuse a single AudioContext (browsers limit active contexts) ── */
+let _audioCtx = null;
+function _getAudioCtx() {
+    if (!_audioCtx || _audioCtx.state === 'closed') {
+        _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    // Resume if suspended (iOS Safari suspends on page load)
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    return _audioCtx;
+}
 function playTone(freq = 660, dur = 0.3, type = 'sine') {
     try {
-        const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+        const ctx  = _getAudioCtx();
         const osc  = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain); gain.connect(ctx.destination);
@@ -1602,7 +1658,8 @@ function updateLiveTimer() {
     const nudge = document.getElementById('time-blindness-nudge');
     const notes = getLocalNotes();
     if (notes.length > 0) {
-        const last = notes.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+        // reduce is O(n) with no sort allocation; avoids mutating the cached array
+        const last = notes.reduce((a, b) => a.timestamp > b.timestamp ? a : b);
         const mins = Math.floor((Date.now() - new Date(last.timestamp)) / 60000);
         nudge.textContent = mins < 1 ? '✨ Just logged.' : `⏳ ${mins}m since last entry.`;
     }
@@ -1653,7 +1710,7 @@ function _setPauseBtn(isPaused) {
 }
 function pomoStartTick() {
     pomoStopTick();
-    _pomoTick = setInterval(pomoTick, 500);
+    _pomoTick = setInterval(pomoTick, 1000);
     pomoTick();   // render immediately — state is already written before this is called
 }
 function pomoTick() {
@@ -1736,7 +1793,7 @@ async function pomoPhaseEnd(s) {
     pomoStartTick();
 }
 
-/* ── Public API ─────────────────────────────────────────────────────────── *//* ── Public API ─────────────────────────────────────────────────────────── *//* ── Public API ─────────────────────────────────────────────────────────── */
+/* ── Public API ─────────────────────────────────────────────────────────── */
 async function startFocus() {
     const text = noteInput.value.trim();
     if (!text) { showToast('Enter a focus goal first'); return; }
@@ -1903,8 +1960,8 @@ async function deleteNote(id) {
 
     // Tombstone so other devices honour this deletion on next sync
     const deleted = getDeletedIds();
-    if (!deleted.includes(safeId)) deleted.push(safeId);
-    setDeletedIds(deleted);
+    const delSet = new Set(deleted);
+    if (!delSet.has(safeId)) { delSet.add(safeId); setDeletedIds(Array.from(delSet)); }
 
     renderAll();
     document.getElementById('notes-list').innerHTML = '';
@@ -1918,6 +1975,9 @@ function toggleDarkMode() {
     const isDark = document.body.classList.toggle('dark-mode');
     localStorage.setItem('dark_mode', String(isDark));
     document.getElementById('theme-icon').textContent = isDark ? '🌙' : '☀️';
+    // Keep OS/browser chrome in sync with the app theme
+    const meta = document.getElementById('theme-color-meta');
+    if (meta) meta.setAttribute('content', isDark ? '#111010' : '#f5f4f0');
 }
 
 /* =============================================================================
@@ -2021,7 +2081,12 @@ function showNotesForDay(dateKey) {
     }
 
     document.getElementById('llm-controls').style.display = filtered.length > 0 ? 'block' : 'none';
-    renderCalendar();
+    // Re-render calendar only if the displayed month matches the selected date's month.
+    // This avoids an unnecessary full DOM rebuild when viewing historical months.
+    const [y, m] = dateKey.split('-').map(Number);
+    if (currentMonth.getFullYear() === y && currentMonth.getMonth() === m - 1) {
+        renderCalendar();
+    }
 }
 
 /* =============================================================================
@@ -2368,7 +2433,7 @@ function exportNotes() {
 function importNotes(e) {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 1_000_000) { showToast('File too large (max 1 MB)'); return; }
+    if (file.size > 10_000_000) { showToast('File too large (max 10 MB)'); return; }
     const reader = new FileReader();
     reader.onload = ev => {
         const parsed = safeJSON(ev.target.result, null);
@@ -2401,7 +2466,12 @@ document.getElementById('prev-month-btn').addEventListener('click', () => change
 document.getElementById('next-month-btn').addEventListener('click', () => changeMonth(1));
 document.getElementById('export-btn').addEventListener('click', exportNotes);
 document.getElementById('import-file').addEventListener('change', importNotes);
-document.getElementById('search-input').addEventListener('input', searchNotes);
+/* Debounce search: avoids scanning all notes on every keystroke */
+let _searchDebounce = null;
+document.getElementById('search-input').addEventListener('input', () => {
+    clearTimeout(_searchDebounce);
+    _searchDebounce = setTimeout(searchNotes, 160);
+});
 document.getElementById('summarize-btn').addEventListener('click', generateDailySummary);
 
 document.getElementById('model-select').addEventListener('change', function() {
@@ -2422,11 +2492,70 @@ document.getElementById('model-select').addEventListener('change', function() {
  * ============================================================================= */
 window.addEventListener('load', initGIS);
 
+/* ─────────────────────────────────────────────────────────
+ * PWA Install Prompt  (Android Chrome / Edge / Samsung)
+ * iOS Safari install instructions shown in a toast instead
+ * because Safari does not fire beforeinstallprompt.
+ * ───────────────────────────────────────────────────────── */
+let _deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    _deferredInstallPrompt = e;
+    // Don't show if already installed (display-mode: standalone)
+    if (window.matchMedia('(display-mode: standalone)').matches) return;
+    // Don't nag if user previously dismissed
+    if (localStorage.getItem('install_dismissed')) return;
+    const banner = document.getElementById('install-banner');
+    if (banner) banner.style.display = 'flex';
+});
+
+window.addEventListener('appinstalled', () => {
+    _deferredInstallPrompt = null;
+    const banner = document.getElementById('install-banner');
+    if (banner) banner.style.display = 'none';
+    showToast('App installed! 🎉 Open from your home screen.');
+});
+
+document.getElementById('install-btn')?.addEventListener('click', async () => {
+    if (!_deferredInstallPrompt) return;
+    _deferredInstallPrompt.prompt();
+    const { outcome } = await _deferredInstallPrompt.userChoice;
+    _deferredInstallPrompt = null;
+    document.getElementById('install-banner').style.display = 'none';
+    if (outcome === 'dismissed') localStorage.setItem('install_dismissed', '1');
+});
+
+document.getElementById('install-dismiss')?.addEventListener('click', () => {
+    document.getElementById('install-banner').style.display = 'none';
+    localStorage.setItem('install_dismissed', '1');
+});
+
+// iOS Safari — no beforeinstallprompt, so show a one-time guide toast
+(function checkiOSInstall() {
+    const isIOS  = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isSafari = /safari/i.test(navigator.userAgent) && !/chrome/i.test(navigator.userAgent);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                      || window.navigator.standalone;
+    if (isIOS && isSafari && !isStandalone && !localStorage.getItem('ios_install_shown')) {
+        localStorage.setItem('ios_install_shown', '1');
+        setTimeout(() => showToast('📲 Tap Share → "Add to Home Screen" to install', 6000), 3000);
+    }
+})();
+
 (function init() {
     renderFocus();
     updateLiveTimer();
     updateLiveClock();
-    setInterval(updateLiveClock, 60000);
+    // Align clock tick to actual minute boundary so it never drifts
+    (() => {
+        const now = new Date();
+        const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+        setTimeout(() => {
+            updateLiveClock();
+            setInterval(updateLiveClock, 60000);
+        }, msToNextMinute);
+    })();
     updateStreakUI();
     initNextUp();
     renderRecentStrip();
@@ -2438,20 +2567,38 @@ window.addEventListener('load', initGIS);
     const isDark = saved === null ? true : saved !== 'false';
     document.body.classList.toggle('dark-mode', isDark);
     document.getElementById('theme-icon').textContent = isDark ? '🌙' : '☀️';
+    const tcMeta = document.getElementById('theme-color-meta');
+    if (tcMeta) tcMeta.setAttribute('content', isDark ? '#111010' : '#f5f4f0');
 
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/InterstitialJournal/sw.js')
             .then(reg => {
+                // Check for updates every time the page is focused
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') reg.update().catch(() => {});
+                });
                 reg.onupdatefound = () => {
                     const sw = reg.installing;
                     sw.onstatechange = () => {
                         if (sw.state === 'installed' && navigator.serviceWorker.controller) {
-                            showToast('Update available — refresh to apply', 5000);
+                            // Use SKIP_WAITING so user gets update on next navigation,
+                            // not immediately mid-session (avoids jarring reloads).
+                            showToast('Update ready — tap to apply ↺', 8000);
+                            document.getElementById('toast').addEventListener('click', () => {
+                                sw.postMessage('SKIP_WAITING');
+                                window.location.reload();
+                            }, { once: true });
                         }
                     };
                 };
             })
             .catch(err => console.error('SW registration failed:', err));
+
+        // Reload cleanly whenever a new SW takes control
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!refreshing) { refreshing = true; window.location.reload(); }
+        });
     }
 })();
 </script>

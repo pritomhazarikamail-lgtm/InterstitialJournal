@@ -1,20 +1,38 @@
 {
     "name": "Interstitial Journal",
     "short_name": "Journal",
+    "description": "A private, offline-first interstitial journal with focus timer and AI summaries.",
     "start_url": "/InterstitialJournal/index.html",
+    "scope": "/InterstitialJournal/",
     "display": "standalone",
-    "background_color": "#ffffff",
+    "orientation": "portrait-primary",
+    "background_color": "#111010",
     "theme_color": "#007aff",
+    "lang": "en",
+    "categories": ["productivity", "lifestyle"],
     "icons": [
-      {
-        "src": "journal_icon.png",
-        "sizes": "192x192",
-        "type": "image/png"
-      },
-      {
-        "src": "journal_icon.png",
-        "sizes": "512x512",
-        "type": "image/png"
-      }
-    ]
-  }
+        {
+            "src": "journal_icon.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "journal_icon.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "screenshots": [],
+    "shortcuts": [
+        {
+            "name": "New Entry",
+            "short_name": "Write",
+            "description": "Jump straight to the write tab",
+            "url": "/InterstitialJournal/index.html#write",
+            "icons": [{ "src": "journal_icon.png", "sizes": "192x192" }]
+        }
+    ],
+    "prefer_related_applications": false
+}
