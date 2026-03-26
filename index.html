@@ -16,21 +16,17 @@
         - style-src: 'unsafe-inline' is required because all CSS is inline in this single-file app.
     -->
     <meta http-equiv="Content-Security-Policy" content="
-    default-src 'none';
-    /* Added 'blob:' to script-src for WebLLM workers */
-    script-src 'self' https://accounts.google.com/gsi/client https://esm.run 'unsafe-inline' blob:;
-    style-src 'self' 'unsafe-inline';
-    /* Added Hugging Face and GitHub for model downloads */
-    connect-src 'self' https://www.googleapis.com https://accounts.google.com https://esm.run https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://raw.githubusercontent.com;
-    img-src 'self' data:;
-    /* Explicitly allow workers */
-    worker-src 'self' blob:;
-    font-src 'none';
-    object-src 'none';
-    base-uri 'none';
-    frame-ancestors 'none';
-    form-action 'none';
-">
+        default-src 'none';
+        script-src 'self' https://accounts.google.com/gsi/client https://esm.run 'unsafe-inline';
+        style-src 'self' 'unsafe-inline';
+        connect-src https://www.googleapis.com https://accounts.google.com https://esm.run https://cdn.jsdelivr.net;
+        img-src 'self' data:;
+        font-src 'none';
+        object-src 'none';
+        base-uri 'none';
+        frame-ancestors 'none';
+        form-action 'none';
+    ">
     <!-- SECURITY: Prevent browsers from sniffing MIME types -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <!-- SECURITY: No referrer leakage to external origins -->
@@ -442,559 +438,797 @@
 </div>
 
 <script type="module">
-    'use strict';
-    
-    /* =============================================================================
-     * SECURITY LAYER & UTILITIES
-     * ============================================================================= */
-    
-    function sanitiseId(id) {
-        const n = Number(id);
-        return Number.isInteger(n) && n > 0 && n <= Number.MAX_SAFE_INTEGER ? n : null;
-    }
-    
-    function validateNote(note) {
-        if (!note || typeof note !== 'object' || Array.isArray(note)) return null;
-        const id = sanitiseId(note.id);
-        if (!id) return null;
-        if (typeof note.content !== 'string') return null;
-        if (typeof note.timestamp !== 'string' || isNaN(Date.parse(note.timestamp))) return null;
-        if (typeof note.dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(note.dateKey)) return null;
-        return {
-            id,
-            timestamp: note.timestamp,
-            content: note.content.slice(0, 5000),
-            dateKey: note.dateKey,
-            tags: Array.isArray(note.tags)
-                ? note.tags.filter(t => typeof t === 'string' && /^#\w+$/.test(t)).slice(0, 20)
-                : [],
-        };
-    }
-    
-    function safeJSON(str, fallback) {
-        try { return JSON.parse(str) ?? fallback; } catch { return fallback; }
-    }
-    
-    function getLocalNotes() {
-        const raw = safeJSON(localStorage.getItem('journal_notes'), []);
-        return Array.isArray(raw) ? raw.map(validateNote).filter(Boolean) : [];
-    }
-    function setLocalNotes(notes) { localStorage.setItem('journal_notes', JSON.stringify(notes)); }
-    
-    function getDeletedIds() {
-        const raw = safeJSON(localStorage.getItem('journal_deleted_ids'), []);
-        return Array.isArray(raw) ? raw.map(sanitiseId).filter(Boolean) : [];
-    }
-    function setDeletedIds(ids) { localStorage.setItem('journal_deleted_ids', JSON.stringify(ids)); }
-    
-    /* =============================================================================
-     * CUSTOM MODAL & TOAST
-     * ============================================================================= */
-    const modalOverlay  = document.getElementById('modal-overlay');
-    const modalTitle    = document.getElementById('modal-title');
-    const modalMessage  = document.getElementById('modal-message');
-    const modalTextarea = document.getElementById('modal-textarea');
-    const modalCancel   = document.getElementById('modal-cancel');
-    const modalConfirm  = document.getElementById('modal-confirm');
-    let _modalResolve   = null;
-    
-    function showModal({ title, message, defaultValue, isDanger = false }) {
-        return new Promise(resolve => {
-            _modalResolve = resolve;
-            modalTitle.textContent = title;
-            if (message) { modalMessage.textContent = message; modalMessage.classList.remove('hidden'); }
-            else { modalMessage.classList.add('hidden'); }
-            if (defaultValue !== undefined) {
-                modalTextarea.value = defaultValue;
-                modalTextarea.classList.remove('hidden');
-                requestAnimationFrame(() => { modalTextarea.focus(); modalTextarea.select(); });
-            } else {
-                modalTextarea.classList.add('hidden');
-            }
-            modalConfirm.className = `modal-btn ${isDanger ? 'modal-btn-danger' : 'modal-btn-confirm'}`;
-            modalConfirm.textContent = isDanger ? 'Delete' : 'Save';
-            modalOverlay.classList.add('visible');
-        });
-    }
-    function closeModal(result) {
-        modalOverlay.classList.remove('visible');
-        if (_modalResolve) { _modalResolve(result); _modalResolve = null; }
-    }
-    modalConfirm.addEventListener('click', () =>
-        closeModal(modalTextarea.classList.contains('hidden') ? true : modalTextarea.value.trim())
-    );
-    modalCancel.addEventListener('click', () => closeModal(null));
-    modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) closeModal(null); });
-    
-    const toastEl = document.getElementById('toast');
-    let _toastTimer = null;
-    function showToast(msg, ms = 2600) {
-        toastEl.textContent = msg;
-        toastEl.classList.add('show');
-        clearTimeout(_toastTimer);
-        _toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
-    }
-    
-    /* =============================================================================
-     * 1. CONFIG & SYNC STATE
-     * ============================================================================= */
-    const CLIENT_ID = '629370111704-m36nu5qgi52071qgp0sfsbs5sa9ac80k.apps.googleusercontent.com';
-    const SCOPES    = 'https://www.googleapis.com/auth/drive.appdata';
-    
-    let tokenClient = null;
-    let accessToken = null;
-    let driveFileId = null;
-    let syncInterval = null;
-    let isSyncing    = false;
-    
-    let currentMonth = new Date();
-    const noteInput  = document.getElementById('note-input');
-    const charCounter = document.getElementById('char-counter');
-    let engine = null;
-    const modelId = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
-    
-    const getISODate = d => {
-        const dt = new Date(d);
-        return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+'use strict';
+
+/* =============================================================================
+ * SECURITY LAYER
+ *
+ * All user content flows through these helpers. No raw user string ever
+ * touches innerHTML directly — this eliminates stored XSS entirely.
+ * ============================================================================= */
+
+/** Sanitise a note ID. IDs are Date.now() integers; reject everything else. */
+function sanitiseId(id) {
+    const n = Number(id);
+    return Number.isInteger(n) && n > 0 && n <= Number.MAX_SAFE_INTEGER ? n : null;
+}
+
+/** Validate & normalise a single note object. Returns null if malformed. */
+function validateNote(note) {
+    if (!note || typeof note !== 'object' || Array.isArray(note)) return null;
+    const id = sanitiseId(note.id);
+    if (!id) return null;
+    if (typeof note.content !== 'string') return null;
+    if (typeof note.timestamp !== 'string' || isNaN(Date.parse(note.timestamp))) return null;
+    if (typeof note.dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(note.dateKey)) return null;
+    return {
+        id,
+        timestamp: note.timestamp,
+        content: note.content.slice(0, 5000),
+        dateKey: note.dateKey,
+        tags: Array.isArray(note.tags)
+            ? note.tags.filter(t => typeof t === 'string' && /^#\w+$/.test(t)).slice(0, 20)
+            : [],
     };
-    
-    /* =============================================================================
-     * 2. GOOGLE DRIVE SYNC
-     * ============================================================================= */
-    function initGIS() {
-        if (!window.google?.accounts) { setTimeout(initGIS, 500); return; }
-        tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: CLIENT_ID,
-            scope: SCOPES,
-            callback: async (response) => {
-                if (response.error) { updateSyncUI('❌', 'Auth Error'); return; }
-                accessToken = response.access_token;
-                setTimeout(() => { accessToken = null; }, 55 * 60 * 1000);
-                await syncWithDrive();
-                startPeriodicSync();
-            },
-        });
-        if (localStorage.getItem('auto_sync_enabled') === 'true') {
-            tokenClient.requestAccessToken({ prompt: '' });
-        }
-    }
-    
-    function startPeriodicSync() {
-        if (syncInterval) return;
-        syncInterval = setInterval(async () => {
-            if (accessToken && !isSyncing) await syncWithDrive(true);
-        }, 3 * 60 * 1000);
-    }
-    
-    async function handleAuthClick() {
-        if (!tokenClient) { showToast('Google Sign-In not ready yet'); return; }
-        if (!accessToken) {
-            const hadPrior = localStorage.getItem('auto_sync_enabled') === 'true';
-            tokenClient.requestAccessToken({ prompt: hadPrior ? '' : 'select_account' });
+}
+
+/** Safe JSON.parse — never throws. */
+function safeJSON(str, fallback) {
+    try { return JSON.parse(str) ?? fallback; } catch { return fallback; }
+}
+
+function getLocalNotes() {
+    const raw = safeJSON(localStorage.getItem('journal_notes'), []);
+    return Array.isArray(raw) ? raw.map(validateNote).filter(Boolean) : [];
+}
+function setLocalNotes(notes) { localStorage.setItem('journal_notes', JSON.stringify(notes)); }
+
+function getDeletedIds() {
+    const raw = safeJSON(localStorage.getItem('journal_deleted_ids'), []);
+    return Array.isArray(raw) ? raw.map(sanitiseId).filter(Boolean) : [];
+}
+function setDeletedIds(ids) { localStorage.setItem('journal_deleted_ids', JSON.stringify(ids)); }
+
+/* =============================================================================
+ * CUSTOM MODAL  (replaces prompt() / confirm())
+ * ============================================================================= */
+const modalOverlay  = document.getElementById('modal-overlay');
+const modalTitle    = document.getElementById('modal-title');
+const modalMessage  = document.getElementById('modal-message');
+const modalTextarea = document.getElementById('modal-textarea');
+const modalCancel   = document.getElementById('modal-cancel');
+const modalConfirm  = document.getElementById('modal-confirm');
+let _modalResolve   = null;
+
+function showModal({ title, message, defaultValue, isDanger = false }) {
+    return new Promise(resolve => {
+        _modalResolve = resolve;
+        modalTitle.textContent = title;
+        if (message) { modalMessage.textContent = message; modalMessage.classList.remove('hidden'); }
+        else { modalMessage.classList.add('hidden'); }
+        if (defaultValue !== undefined) {
+            modalTextarea.value = defaultValue;
+            modalTextarea.classList.remove('hidden');
+            requestAnimationFrame(() => { modalTextarea.focus(); modalTextarea.select(); });
         } else {
+            modalTextarea.classList.add('hidden');
+        }
+        modalConfirm.className = `modal-btn ${isDanger ? 'modal-btn-danger' : 'modal-btn-confirm'}`;
+        modalConfirm.textContent = isDanger ? 'Delete' : 'Save';
+        modalOverlay.classList.add('visible');
+    });
+}
+function closeModal(result) {
+    modalOverlay.classList.remove('visible');
+    if (_modalResolve) { _modalResolve(result); _modalResolve = null; }
+}
+modalConfirm.addEventListener('click', () =>
+    closeModal(modalTextarea.classList.contains('hidden') ? true : modalTextarea.value.trim())
+);
+modalCancel.addEventListener('click', () => closeModal(null));
+modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) closeModal(null); });
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && modalOverlay.classList.contains('visible')) closeModal(null);
+});
+
+/* =============================================================================
+ * TOAST
+ * ============================================================================= */
+const toastEl = document.getElementById('toast');
+let _toastTimer = null;
+function showToast(msg, ms = 2600) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
+}
+
+/* =============================================================================
+ * 1. CONFIG & STATE
+ * =============================================================================
+ * SECURITY NOTE: CLIENT_ID is a public identifier, not a secret. It must be
+ * registered in Google Cloud Console with the exact allowed origin. The
+ * drive.appdata scope is strictly app-sandboxed — this app cannot read any
+ * other file in the user's Drive.
+ * ============================================================================= */
+const CLIENT_ID = '629370111704-m36nu5qgi52071qgp0sfsbs5sa9ac80k.apps.googleusercontent.com';
+const SCOPES    = 'https://www.googleapis.com/auth/drive.appdata';
+
+let tokenClient = null;
+let accessToken = null;   // Lives in memory only, never persisted
+let driveFileId = null;
+let syncInterval = null;
+let isSyncing    = false; // Mutex: prevents concurrent overlapping syncs
+
+let currentMonth = new Date();
+const noteInput  = document.getElementById('note-input');
+const charCounter = document.getElementById('char-counter');
+let engine = null;
+const modelId = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+
+const getISODate = d => {
+    const dt = new Date(d);
+    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+};
+
+/* =============================================================================
+ * 2. GOOGLE DRIVE SYNC
+ * ============================================================================= */
+function initGIS() {
+    if (!window.google?.accounts) { setTimeout(initGIS, 500); return; }
+    tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: async (response) => {
+            if (response.error) { updateSyncUI('❌', 'Auth Error'); return; }
+            accessToken = response.access_token;
+            // Clear token before it expires (~1 h for Google OAuth tokens)
+            setTimeout(() => { accessToken = null; }, 55 * 60 * 1000);
             await syncWithDrive();
-        }
+            startPeriodicSync();
+        },
+    });
+    // Silently restore session for returning users — no interaction required
+    if (localStorage.getItem('auto_sync_enabled') === 'true') {
+        tokenClient.requestAccessToken({ prompt: '' });
     }
-    
-    function updateSyncUI(icon, text) {
-        document.getElementById('sync-icon').textContent = icon;
-        document.getElementById('sync-text').textContent = text;
+}
+
+function startPeriodicSync() {
+    if (syncInterval) return;
+    syncInterval = setInterval(async () => {
+        if (accessToken && !isSyncing) await syncWithDrive(true);
+    }, 3 * 60 * 1000);
+}
+
+async function handleAuthClick() {
+    if (!tokenClient) { showToast('Google Sign-In not ready yet'); return; }
+    if (!accessToken) {
+        const hadPrior = localStorage.getItem('auto_sync_enabled') === 'true';
+        tokenClient.requestAccessToken({ prompt: hadPrior ? '' : 'select_account' });
+    } else {
+        await syncWithDrive();
     }
-    
-    async function apiFetch(url, method = 'GET', body, extraHeaders = {}) {
-        return fetch(url, {
-            method,
-            headers: { Authorization: `Bearer ${accessToken}`, ...extraHeaders },
-            ...(body !== undefined && { body }),
-        });
-    }
-    
-    async function syncWithDrive(silent = false) {
-        if (isSyncing) return;
-        isSyncing = true;
-        try {
-            if (!silent) updateSyncUI('⏳', 'Syncing…');
-            const listRes = await apiFetch(
-                `https://www.googleapis.com/drive/v3/files?q=name%3D'journal_data.json'&spaces=appDataFolder&fields=files(id%2CmodifiedTime)&orderBy=modifiedTime+desc`
-            );
-            const { files } = await listRes.json();
-            if (Array.isArray(files) && files.length > 0) {
-                driveFileId = files[0].id;
-                const fileRes = await apiFetch(
-                    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media`
-                );
-                if (fileRes.ok) mergeNotes(await fileRes.json());
-            }
-            await uploadToDrive();
-            localStorage.setItem('auto_sync_enabled', 'true');
-            if (!silent) {
-                updateSyncUI('✅', 'Synced ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
-                showToast('✅ Synced with Google Drive');
-            }
-        } catch (err) {
-            if (!silent) updateSyncUI('❌', 'Sync Error');
-        } finally { isSyncing = false; }
-    }
-    
-    async function uploadToDrive() {
-        if (!accessToken) return;
-        const payload  = JSON.stringify({ notes: getLocalNotes(), deletedIds: getDeletedIds() });
-        const metadata = driveFileId ? {} : { name: 'journal_data.json', parents: ['appDataFolder'] };
-        const boundary = 'journal_sync_v1';
-        const body =
-            `\r\n--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` + JSON.stringify(metadata) +
-            `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` + payload +
-            `\r\n--${boundary}--`;
-        const url = driveFileId
-            ? `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(driveFileId)}?uploadType=multipart`
-            : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
-        const res = await apiFetch(url, driveFileId ? 'PATCH' : 'POST', body, {
-            'Content-Type': `multipart/related; boundary=${boundary}`,
-        });
-        if (!driveFileId && res.ok) driveFileId = (await res.json()).id;
-    }
-    
-    function mergeNotes(driveData) {
-        const rawDriveNotes   = Array.isArray(driveData) ? driveData : (driveData?.notes ?? []);
-        const rawDriveDeleted = Array.isArray(driveData) ? [] : (driveData?.deletedIds ?? []);
-        const driveNotes      = rawDriveNotes.map(validateNote).filter(Boolean);
-        const driveDeleted    = rawDriveDeleted.map(sanitiseId).filter(Boolean);
-        const localNotes      = getLocalNotes();
-        const localDeleted    = getDeletedIds();
-        const allDeleted      = new Set([...localDeleted, ...driveDeleted]);
-        const merged = new Map();
-        [...localNotes, ...driveNotes].forEach(n => {
-            const ex = merged.get(n.id);
-            if (!ex || new Date(n.timestamp) > new Date(ex.timestamp)) merged.set(n.id, n);
-        });
-        allDeleted.forEach(id => merged.delete(id));
-        setLocalNotes(Array.from(merged.values()));
-        setDeletedIds(Array.from(allDeleted));
-        renderAll();
-    }
-    
-    /* =============================================================================
-     * 3. ADHD FEATURES
-     * ============================================================================= */
-    function updateStreakUI() {
-        const streak = Math.min(parseInt(localStorage.getItem('focus_streak') || '0', 10), 100);
-        document.querySelectorAll('.streak-dot').forEach((dot, i) =>
-            dot.classList.toggle('filled', i < streak)
+}
+
+function updateSyncUI(icon, text) {
+    document.getElementById('sync-icon').textContent = icon;
+    document.getElementById('sync-text').textContent = text;
+}
+
+/**
+ * Thin fetch wrapper that enforces googleapis.com as the only allowed host.
+ * SECURITY: Prevents token leakage if a URL were ever constructed from
+ * user-controlled data (defence in depth).
+ */
+async function apiFetch(url, method = 'GET', body, extraHeaders = {}) {
+    const { hostname } = new URL(url);
+    if (!hostname.endsWith('googleapis.com')) throw new Error(`Blocked: ${hostname}`);
+    return fetch(url, {
+        method,
+        headers: { Authorization: `Bearer ${accessToken}`, ...extraHeaders },
+        ...(body !== undefined && { body }),
+    });
+}
+
+async function syncWithDrive(silent = false) {
+    if (isSyncing) return;
+    isSyncing = true;
+    try {
+        if (!silent) updateSyncUI('⏳', 'Syncing…');
+
+        // List files sorted newest-first; fields param minimises payload
+        const listRes = await apiFetch(
+            `https://www.googleapis.com/drive/v3/files?q=name%3D'journal_data.json'&spaces=appDataFolder&fields=files(id%2CmodifiedTime)&orderBy=modifiedTime+desc`
         );
-        if (streak >= 3) {
-            const msg = document.getElementById('streak-message');
-            msg.textContent = '🌟 Dopamine Hit! 3 in a row!';
-            msg.classList.remove('hidden');
-            document.getElementById('focus-section').classList.add('celebrate');
-            setTimeout(() => {
-                localStorage.setItem('focus_streak', '0');
-                msg.classList.add('hidden');
-                document.getElementById('focus-section').classList.remove('celebrate');
-                updateStreakUI();
-            }, 5000);
+        if (!listRes.ok) throw new Error(`Drive list: ${listRes.status}`);
+        const { files } = await listRes.json();
+
+        // Purge duplicate files left by the old single-device bug
+        if (Array.isArray(files) && files.length > 1) {
+            await Promise.all(
+                files.slice(1).map(f =>
+                    apiFetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(f.id)}`, 'DELETE')
+                )
+            );
+        }
+
+        if (Array.isArray(files) && files.length > 0) {
+            driveFileId = files[0].id;
+            const fileRes = await apiFetch(
+                `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media`
+            );
+            if (fileRes.ok) {
+                const driveData = await fileRes.json();
+                mergeNotes(driveData); // validation happens inside mergeNotes
+            }
+        }
+
+        await uploadToDrive();
+        localStorage.setItem('auto_sync_enabled', 'true');
+        if (!silent) {
+            updateSyncUI('✅', 'Synced ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+            showToast('✅ Synced with Google Drive');
+        }
+    } catch (err) {
+        console.error('Sync error:', err);
+        if (!silent) updateSyncUI('❌', 'Sync Error');
+    } finally {
+        isSyncing = false;
+    }
+}
+
+async function uploadToDrive() {
+    if (!accessToken) return;
+
+    // Avoid creating a duplicate file when driveFileId is unknown
+    if (!driveFileId) {
+        const checkRes = await apiFetch(
+            `https://www.googleapis.com/drive/v3/files?q=name%3D'journal_data.json'&spaces=appDataFolder&fields=files(id)`
+        );
+        if (checkRes.ok) {
+            const { files } = await checkRes.json();
+            if (Array.isArray(files) && files.length > 0) driveFileId = files[0].id;
         }
     }
-    
-    function updateLiveTimer() {
-        const nudge = document.getElementById('time-blindness-nudge');
-        const notes = getLocalNotes();
-        if (notes.length > 0) {
-            const last = notes.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
-            const mins = Math.floor((Date.now() - new Date(last.timestamp)) / 60000);
-            nudge.textContent = mins < 1 ? '✨ Just logged.' : `⏳ ${mins}m since last entry.`;
-        }
-        const focusStart = localStorage.getItem('focus_start_time');
-        if (focusStart) {
-            document.getElementById('focus-timer').textContent =
-                `${Math.floor((Date.now() - new Date(focusStart)) / 60000)}m`;
-        }
+
+    const payload  = JSON.stringify({ notes: getLocalNotes(), deletedIds: getDeletedIds() });
+    const metadata = driveFileId ? {} : { name: 'journal_data.json', parents: ['appDataFolder'] };
+    const boundary = 'journal_sync_v1';
+    const body =
+        `\r\n--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` + JSON.stringify(metadata) +
+        `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` + payload +
+        `\r\n--${boundary}--`;
+
+    const url = driveFileId
+        ? `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(driveFileId)}?uploadType=multipart`
+        : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+
+    const res = await apiFetch(url, driveFileId ? 'PATCH' : 'POST', body, {
+        'Content-Type': `multipart/related; boundary=${boundary}`,
+    });
+    if (!driveFileId && res.ok) driveFileId = (await res.json()).id;
+}
+
+function mergeNotes(driveData) {
+    // Backwards-compatible with the old plain-array format
+    const rawDriveNotes   = Array.isArray(driveData) ? driveData : (driveData?.notes ?? []);
+    const rawDriveDeleted = Array.isArray(driveData) ? [] : (driveData?.deletedIds ?? []);
+
+    // SECURITY: validate every note arriving from Drive before touching localStorage
+    const driveNotes   = rawDriveNotes.map(validateNote).filter(Boolean);
+    const driveDeleted = rawDriveDeleted.map(sanitiseId).filter(Boolean);
+
+    const localNotes   = getLocalNotes();
+    const localDeleted = getDeletedIds();
+    const allDeleted   = new Set([...localDeleted, ...driveDeleted]);
+
+    // Last-writer-wins merge
+    const merged = new Map();
+    [...localNotes, ...driveNotes].forEach(n => {
+        const ex = merged.get(n.id);
+        if (!ex || new Date(n.timestamp) > new Date(ex.timestamp)) merged.set(n.id, n);
+    });
+    allDeleted.forEach(id => merged.delete(id));
+
+    setLocalNotes(Array.from(merged.values()));
+    setDeletedIds(Array.from(allDeleted));
+
+    const titleEl = document.getElementById('selected-date-title');
+    if (titleEl.textContent.startsWith('Notes for ')) {
+        showNotesForDay(titleEl.textContent.replace('Notes for ', '').trim());
     }
-    
-    async function startFocus() {
-        const text = noteInput.value.trim();
-        if (!text) { showToast('Enter a focus goal first'); return; }
-        localStorage.setItem('current_focus', text.slice(0, 200));
-        localStorage.setItem('focus_start_time', new Date().toISOString());
+    renderAll();
+}
+
+/* =============================================================================
+ * 3. ADHD FEATURES
+ * ============================================================================= */
+function updateStreakUI() {
+    const streak = Math.min(parseInt(localStorage.getItem('focus_streak') || '0', 10), 100);
+    document.querySelectorAll('.streak-dot').forEach((dot, i) =>
+        dot.classList.toggle('filled', i < streak)
+    );
+    const msg = document.getElementById('streak-message');
+    if (streak >= 3) {
+        msg.textContent = '🌟 Dopamine Hit! 3 in a row!';
+        msg.classList.remove('hidden');
+        document.getElementById('focus-section').classList.add('celebrate');
+        setTimeout(() => {
+            localStorage.setItem('focus_streak', '0');
+            msg.classList.add('hidden');
+            document.getElementById('focus-section').classList.remove('celebrate');
+            updateStreakUI();
+        }, 5000);
+    }
+}
+
+function updateLiveTimer() {
+    const nudge = document.getElementById('time-blindness-nudge');
+    const notes = getLocalNotes();
+    if (notes.length > 0) {
+        const last = notes.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+        const mins = Math.floor((Date.now() - new Date(last.timestamp)) / 60000);
+        nudge.textContent = mins < 1 ? '✨ Just logged.' : `⏳ ${mins}m since last entry.`;
+    }
+    const focusStart = localStorage.getItem('focus_start_time');
+    if (focusStart) {
+        document.getElementById('focus-timer').textContent =
+            `${Math.floor((Date.now() - new Date(focusStart)) / 60000)}m`;
+    }
+}
+
+async function startFocus() {
+    const text = noteInput.value.trim();
+    if (!text) { showToast('Enter a focus goal first'); return; }
+    // SECURITY: store raw text; rendered via textContent not innerHTML
+    localStorage.setItem('current_focus', text.slice(0, 200));
+    localStorage.setItem('focus_start_time', new Date().toISOString());
+    noteInput.value = '';
+    charCounter.textContent = '0 / 5000';
+    charCounter.classList.remove('warn');
+    renderFocus();
+    updateLiveTimer();
+}
+
+async function completeFocus() {
+    const text  = localStorage.getItem('current_focus');
+    const start = localStorage.getItem('focus_start_time');
+    if (!text || !start) return;
+    const dur = Math.floor((Date.now() - new Date(start)) / 60000);
+    await saveNote(`✅ Finished: ${text} (#focus for ${dur}m)`);
+    const streak = parseInt(localStorage.getItem('focus_streak') || '0', 10);
+    localStorage.setItem('focus_streak', String(streak + 1));
+    localStorage.removeItem('current_focus');
+    localStorage.removeItem('focus_start_time');
+    renderFocus();
+    updateStreakUI();
+}
+
+function renderFocus() {
+    const text = localStorage.getItem('current_focus');
+    const section = document.getElementById('focus-section');
+    if (text) {
+        section.classList.remove('hidden');
+        // SECURITY: textContent — user data never goes into innerHTML
+        document.getElementById('focus-text').textContent = text;
+    } else {
+        section.classList.add('hidden');
+    }
+}
+
+/* =============================================================================
+ * 4. CRUD
+ * ============================================================================= */
+async function saveNote(manualText = null) {
+    const text = manualText || noteInput.value.trim();
+    if (!text) return;
+    if (text.length > 5000) { showToast('Note too long (max 5000 chars)'); return; }
+
+    const newNote = validateNote({
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        content: text,
+        dateKey: getISODate(new Date()),
+        tags: (text.match(/#(\w+)/g) || []).map(t => t.toLowerCase()),
+    });
+    if (!newNote) return;
+
+    const notes = getLocalNotes();
+    notes.push(newNote);
+    setLocalNotes(notes);
+
+    if (!manualText) {
         noteInput.value = '';
         charCounter.textContent = '0 / 5000';
-        renderFocus();
-        updateLiveTimer();
+        charCounter.classList.remove('warn');
     }
-    
-    async function completeFocus() {
-        const text = localStorage.getItem('current_focus');
-        const start = localStorage.getItem('focus_start_time');
-        if (!text || !start) return;
-        const dur = Math.floor((Date.now() - new Date(start)) / 60000);
-        await saveNote(`✅ Finished: ${text} (#focus for ${dur}m)`);
-        localStorage.setItem('focus_streak', String(parseInt(localStorage.getItem('focus_streak') || '0', 10) + 1));
-        localStorage.removeItem('current_focus');
-        localStorage.removeItem('focus_start_time');
-        renderFocus();
-        updateStreakUI();
+    updateLiveTimer();
+    if (accessToken) await uploadToDrive();
+    showToast('Note saved ✓');
+}
+
+async function editNote(id) {
+    const safeId = sanitiseId(id);
+    if (!safeId) return;
+    const notes = getLocalNotes();
+    const idx   = notes.findIndex(n => n.id === safeId);
+    if (idx === -1) return;
+
+    // SECURITY: custom modal — no prompt()
+    const newText = await showModal({ title: 'Edit Note', defaultValue: notes[idx].content });
+    if (!newText || typeof newText !== 'string' || !newText.trim()) return;
+    if (newText.length > 5000) { showToast('Note too long (max 5000 chars)'); return; }
+
+    notes[idx].content   = newText.trim();
+    notes[idx].timestamp = new Date().toISOString();
+    notes[idx].tags      = (newText.match(/#(\w+)/g) || []).map(t => t.toLowerCase());
+    setLocalNotes(notes);
+    showNotesForDay(notes[idx].dateKey);
+    if (accessToken) await uploadToDrive();
+}
+
+async function deleteNote(id) {
+    const safeId = sanitiseId(id);
+    if (!safeId) return;
+
+    // SECURITY: custom modal — no confirm()
+    const confirmed = await showModal({
+        title: 'Delete Note',
+        message: 'Delete this entry permanently? This cannot be undone.',
+        isDanger: true,
+    });
+    if (!confirmed) return;
+
+    const notes = getLocalNotes().filter(n => n.id !== safeId);
+    setLocalNotes(notes);
+
+    // Tombstone so other devices honour this deletion on next sync
+    const deleted = getDeletedIds();
+    if (!deleted.includes(safeId)) deleted.push(safeId);
+    setDeletedIds(deleted);
+
+    renderAll();
+    document.getElementById('notes-list').innerHTML = '';
+    document.getElementById('selected-date-title').textContent = '';
+    document.getElementById('llm-controls').style.display = 'none';
+    if (accessToken) await uploadToDrive();
+    showToast('Note deleted');
+}
+
+function toggleDarkMode() {
+    const isDark = document.body.classList.toggle('dark-mode');
+    localStorage.setItem('dark_mode', String(isDark));
+    document.getElementById('theme-icon').textContent = isDark ? '🌙' : '☀️';
+}
+
+/* =============================================================================
+ * 5. CALENDAR & HISTORY
+ * ============================================================================= */
+function formatDuration(ms) {
+    const m = Math.floor(ms / 60000);
+    return m < 1 ? '< 1m' : m < 60 ? `${m}m` : `${Math.floor(m/60)}h ${m%60}m`;
+}
+
+function renderCalendar() {
+    const cal   = document.getElementById('calendar');
+    const month = currentMonth.getMonth();
+    const year  = currentMonth.getFullYear();
+    cal.innerHTML = '';
+    document.getElementById('month-display').textContent =
+        new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(currentMonth);
+
+    const counts = getLocalNotes().reduce((acc, n) => {
+        acc[n.dateKey] = (acc[n.dateKey] || 0) + 1; return acc;
+    }, {});
+
+    const firstDay    = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    for (let i = 0; i < firstDay; i++) cal.appendChild(document.createElement('div'));
+    for (let d = 1; d <= daysInMonth; d++) {
+        const key   = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const count = counts[key] || 0;
+        const btn   = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `calendar-day${count > 0 ? ' lvl-' + Math.min(Math.ceil(count/2), 4) : ''}`;
+        btn.textContent = d;
+        btn.setAttribute('aria-label', `${key}${count > 0 ? `, ${count} note${count > 1 ? 's' : ''}` : ''}`);
+        btn.addEventListener('click', () => showNotesForDay(key));
+        cal.appendChild(btn);
     }
-    
-    function renderFocus() {
-        const text = localStorage.getItem('current_focus');
-        const section = document.getElementById('focus-section');
-        if (text) {
-            section.classList.remove('hidden');
-            document.getElementById('focus-text').textContent = text;
-        } else { section.classList.add('hidden'); }
-    }
-    
-    /* =============================================================================
-     * 4. CRUD OPERATIONS
-     * ============================================================================= */
-    async function saveNote(manualText = null) {
-        const text = manualText || noteInput.value.trim();
-        if (!text) return;
-        const newNote = validateNote({
-            id: Date.now(),
-            timestamp: new Date().toISOString(),
-            content: text,
-            dateKey: getISODate(new Date()),
-            tags: (text.match(/#(\w+)/g) || []).map(t => t.toLowerCase()),
-        });
-        if (!newNote) return;
-        const notes = getLocalNotes();
-        notes.push(newNote);
-        setLocalNotes(notes);
-        if (!manualText) { noteInput.value = ''; charCounter.textContent = '0 / 5000'; }
-        updateLiveTimer();
-        if (accessToken) await uploadToDrive();
-        showToast('Note saved ✓');
-    }
-    
-    async function editNote(id) {
-        const safeId = sanitiseId(id);
-        const notes = getLocalNotes();
-        const idx = notes.findIndex(n => n.id === safeId);
-        if (idx === -1) return;
-        const newText = await showModal({ title: 'Edit Note', defaultValue: notes[idx].content });
-        if (!newText || !newText.trim()) return;
-        notes[idx].content = newText.trim();
-        notes[idx].timestamp = new Date().toISOString();
-        setLocalNotes(notes);
-        showNotesForDay(notes[idx].dateKey);
-        if (accessToken) await uploadToDrive();
-    }
-    
-    async function deleteNote(id) {
-        const safeId = sanitiseId(id);
-        const confirmed = await showModal({ title: 'Delete Note', message: 'Delete permanently?', isDanger: true });
-        if (!confirmed) return;
-        setLocalNotes(getLocalNotes().filter(n => n.id !== safeId));
-        const deleted = getDeletedIds();
-        if (!deleted.includes(safeId)) deleted.push(safeId);
-        setDeletedIds(deleted);
-        renderAll();
-        if (accessToken) await uploadToDrive();
-    }
-    
-    function toggleDarkMode() {
-        const isDark = document.body.classList.toggle('dark-mode');
-        localStorage.setItem('dark_mode', String(isDark));
-        document.getElementById('theme-icon').textContent = isDark ? '🌙' : '☀️';
-    }
-    
-    /* =============================================================================
-     * 5. CALENDAR & HISTORY
-     * ============================================================================= */
-    function formatDuration(ms) {
-        const m = Math.floor(ms / 60000);
-        return m < 1 ? '< 1m' : m < 60 ? `${m}m` : `${Math.floor(m/60)}h ${m%60}m`;
-    }
-    
-    function renderCalendar() {
-        const cal = document.getElementById('calendar'), month = currentMonth.getMonth(), year = currentMonth.getFullYear();
-        cal.innerHTML = '';
-        document.getElementById('month-display').textContent = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(currentMonth);
-        const counts = getLocalNotes().reduce((acc, n) => { acc[n.dateKey] = (acc[n.dateKey] || 0) + 1; return acc; }, {});
-        const firstDay = new Date(year, month, 1).getDay(), daysInMonth = new Date(year, month + 1, 0).getDate();
-        for (let i = 0; i < firstDay; i++) cal.appendChild(document.createElement('div'));
-        for (let d = 1; d <= daysInMonth; d++) {
-            const key = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`, count = counts[key] || 0;
-            const btn = document.createElement('button');
-            btn.className = `calendar-day${count > 0 ? ' lvl-' + Math.min(Math.ceil(count/2), 4) : ''}`;
-            btn.textContent = d; btn.addEventListener('click', () => showNotesForDay(key));
-            cal.appendChild(btn);
-        }
-    }
-    
-    function showNotesForDay(dateKey) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
-        const list = document.getElementById('notes-list'), notes = getLocalNotes();
-        const filtered = notes.filter(n => n.dateKey === dateKey).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-        document.getElementById('selected-date-title').textContent = `Notes for ${dateKey}`;
-        list.innerHTML = '';
+}
+
+function showNotesForDay(dateKey) {
+    // Validate format to prevent injection via crafted dateKey
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
+
+    const list     = document.getElementById('notes-list');
+    const notes    = getLocalNotes();
+    const filtered = notes
+        .filter(n => n.dateKey === dateKey)
+        .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // SECURITY: textContent — never innerHTML for dynamic values
+    document.getElementById('selected-date-title').textContent = `Notes for ${dateKey}`;
+    list.innerHTML = '';
+
+    if (filtered.length === 0) {
+        const p = document.createElement('p');
+        p.textContent = 'No entries.';
+        list.appendChild(p);
+    } else {
         filtered.forEach((n, i) => {
             if (i > 0) {
-                const gap = document.createElement('div'); gap.className = 'time-gap-container';
-                const badge = document.createElement('div'); badge.className = 'duration-badge';
+                const gap = document.createElement('div');
+                gap.className = 'time-gap-container';
+                const badge = document.createElement('div');
+                badge.className = 'duration-badge';
                 badge.textContent = `⏱️ ${formatDuration(new Date(n.timestamp) - new Date(filtered[i-1].timestamp))} gap`;
-                gap.appendChild(badge); list.appendChild(gap);
+                gap.appendChild(badge);
+                list.appendChild(gap);
             }
-            const card = document.createElement('div'); card.className = 'note-item';
-            const time = document.createElement('small'); time.textContent = new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
-            const contentDiv = document.createElement('div'); contentDiv.style.cssText = 'margin:10px 0;font-size:1.05rem;';
-            n.content.split('\n').forEach((line, li) => { if (li > 0) contentDiv.appendChild(document.createElement('br')); contentDiv.appendChild(document.createTextNode(line)); });
-            const actions = document.createElement('div'); actions.className = 'note-actions';
-            const editBtn = document.createElement('button'); editBtn.className = 'action-link edit-link'; editBtn.textContent = 'Edit'; editBtn.onclick = () => editNote(n.id);
-            const delBtn = document.createElement('button'); delBtn.className = 'action-link delete-link'; delBtn.textContent = 'Delete'; delBtn.onclick = () => deleteNote(n.id);
-            actions.append(editBtn, delBtn); card.append(time, contentDiv, actions); list.appendChild(card);
-        });
-        document.getElementById('llm-controls').style.display = filtered.length > 0 ? 'block' : 'none';
-        renderCalendar();
-    }
-    
-    /* =============================================================================
-     * 6. AI SUMMARY (GENERALISED & GROUNDED)
-     * ============================================================================= */
-    async function generateDailySummary() {
-        const btn    = document.getElementById('summarize-btn');
-        const status = document.getElementById('llm-status');
-        const output = document.getElementById('daily-summary-output');
-        
-        if (!navigator.gpu) {
-            status.textContent = "Error: WebGPU not supported. Use Chrome or Edge on desktop.";
-            return;
-        }
-    
-        btn.disabled = true;
-        try {
-            if (!engine) {
-                status.textContent = "Initializing AI (this may take a minute)...";
-                const webllm = await import('https://esm.run/@mlc-ai/web-llm');
-                engine = await webllm.CreateMLCEngine(modelId, {
-                    initProgressCallback: r => { status.textContent = r.text; }
-                });
-            }
-    
-            const noteTexts = Array.from(document.querySelectorAll('#notes-list .note-item div[style*="margin:10px 0"]'))
-                .map(el => el.textContent).join('\n- ');
-    
-            if (!noteTexts) {
-                status.textContent = "No notes found to summarize.";
-                btn.disabled = false;
-                return;
-            }
-    
-            const res = await engine.chat.completions.create({
-                messages: [
-                    { role: 'system', content: 'You are a helpful assistant. Provide a concise, bulleted summary based strictly on the provided journal entries. Do not include external information, assumptions, or hallucinations.' },
-                    { role: 'user', content: `Summarize the following entries:\n- ${noteTexts}` }
-                ]
+
+            const card = document.createElement('div');
+            card.className = 'note-item';
+
+            const time = document.createElement('small');
+            time.textContent = new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+
+            // SECURITY: split on newlines and use text nodes — never innerHTML
+            const contentDiv = document.createElement('div');
+            contentDiv.style.cssText = 'margin:10px 0;font-size:1.05rem;';
+            n.content.split('\n').forEach((line, li) => {
+                if (li > 0) contentDiv.appendChild(document.createElement('br'));
+                contentDiv.appendChild(document.createTextNode(line));
             });
-    
-            output.textContent = res.choices[0].message.content;
-            status.textContent = 'Summary complete.';
-        } catch (err) {
-            status.textContent = `Error: ${err.message}`;
-            console.error("AI Error:", err);
-        } finally { btn.disabled = false; }
-    }
-    
-    /* =============================================================================
-     * 7. SEARCH & TAGS
-     * ============================================================================= */
-    function searchNotes() {
-        const rawQuery = document.getElementById('search-input').value.toLowerCase();
-        const list = document.getElementById('notes-list'), cal = document.getElementById('calendar'), title = document.getElementById('selected-date-title');
-        if (!rawQuery) { cal.style.display = 'grid'; list.innerHTML = ''; title.textContent = ''; return; }
-        cal.style.display = 'none'; title.textContent = `Search: "${rawQuery}"`;
-        const filtered = getLocalNotes().filter(n => n.content.toLowerCase().includes(rawQuery)).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-        list.innerHTML = '';
-        filtered.forEach(n => {
-            const card = document.createElement('div'); card.className = 'note-item';
-            const dateEl = document.createElement('small'); dateEl.textContent = n.dateKey;
-            const body = document.createElement('div'); body.textContent = n.content;
-            card.append(dateEl, body); list.appendChild(card);
+
+            const actions = document.createElement('div');
+            actions.className = 'note-actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'action-link edit-link';
+            editBtn.textContent = 'Edit';
+            editBtn.addEventListener('click', () => editNote(n.id));
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'action-link delete-link';
+            delBtn.textContent = 'Delete';
+            delBtn.addEventListener('click', () => deleteNote(n.id));
+
+            actions.append(editBtn, delBtn);
+            card.append(time, contentDiv, actions);
+            list.appendChild(card);
         });
     }
-    
-    function renderTagCloud() {
-        const cloud = document.getElementById('tag-cloud'), tags = [...new Set(getLocalNotes().flatMap(n => n.tags || []))];
-        cloud.innerHTML = '';
-        tags.forEach(t => {
-            const btn = document.createElement('button'); btn.className = 'tag'; btn.textContent = t;
-            btn.onclick = () => filterByTag(t); cloud.appendChild(btn);
-        });
-    }
-    
-    function filterByTag(tag) {
-        const notes = getLocalNotes().filter(n => n.tags.includes(tag));
-        document.getElementById('calendar').style.display = 'none';
-        document.getElementById('selected-date-title').textContent = `Tag: ${tag}`;
-        const list = document.getElementById('notes-list'); list.innerHTML = '';
-        notes.forEach(n => {
-            const card = document.createElement('div'); card.className = 'note-item';
-            const dateEl = document.createElement('small'); dateEl.textContent = n.dateKey;
-            const body = document.createElement('div'); body.textContent = n.content;
-            card.append(dateEl, body); list.appendChild(card);
-        });
-    }
-    
-    /* =============================================================================
-     * 8. NAVIGATION & UTILITIES
-     * ============================================================================= */
-    function showPage(pageId) {
-        document.getElementById('home-page').classList.toggle('hidden', pageId !== 'home-page');
-        document.getElementById('history-page').classList.toggle('hidden', pageId !== 'history-page');
-        document.getElementById('nav-write').classList.toggle('active', pageId === 'home-page');
-        document.getElementById('nav-history').classList.toggle('active', pageId === 'history-page');
-        if (pageId === 'history-page') { renderAll(); document.getElementById('notes-list').innerHTML = ''; }
-    }
-    
-    function renderAll() { renderTagCloud(); renderCalendar(); }
-    function changeMonth(dir) { currentMonth.setMonth(currentMonth.getMonth() + dir); renderCalendar(); }
-    function exportNotes() { const blob = new Blob([JSON.stringify(getLocalNotes(), null, 2)], { type: 'application/json' }); const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `journal-${getISODate(new Date())}.json` }); a.click(); }
-    function importNotes(e) { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = ev => { const parsed = safeJSON(ev.target.result, null); if (Array.isArray(parsed)) { setLocalNotes(parsed.map(validateNote).filter(Boolean)); renderAll(); showToast('Imported ✓'); } }; reader.readAsText(file); }
-    
-    /* =============================================================================
-     * 9. EVENT WIRING
-     * ============================================================================= */
-    document.getElementById('save-btn').addEventListener('click', () => saveNote());
-    document.getElementById('focus-btn').addEventListener('click', startFocus);
-    document.getElementById('complete-focus-btn').addEventListener('click', completeFocus);
-    document.getElementById('nav-write').addEventListener('click', () => showPage('home-page'));
-    document.getElementById('nav-history').addEventListener('click', () => showPage('history-page'));
-    document.getElementById('nav-sync').addEventListener('click', handleAuthClick);
-    document.getElementById('nav-theme').addEventListener('click', toggleDarkMode);
-    document.getElementById('prev-month-btn').addEventListener('click', () => changeMonth(-1));
-    document.getElementById('next-month-btn').addEventListener('click', () => changeMonth(1));
-    document.getElementById('export-btn').addEventListener('click', exportNotes);
-    document.getElementById('import-file').addEventListener('change', importNotes);
-    document.getElementById('search-input').addEventListener('input', searchNotes);
-    document.getElementById('summarize-btn').addEventListener('click', generateDailySummary);
-    
-    noteInput.addEventListener('input', () => {
-        const len = noteInput.value.length;
-        charCounter.textContent = `${len} / 5000`;
-        charCounter.classList.toggle('warn', len >= 4500);
-    });
-    
-    /* =============================================================================
-     * 10. INIT
-     * ============================================================================= */
-    window.addEventListener('load', initGIS);
-    
-    (function init() {
-        renderFocus(); updateLiveTimer(); updateStreakUI(); setInterval(updateLiveTimer, 30000);
-        const isDark = localStorage.getItem('dark_mode') !== 'false';
-        document.body.classList.toggle('dark-mode', isDark);
-        document.getElementById('theme-icon').textContent = isDark ? '🌙' : '☀️';
-    
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/InterstitialJournal/sw.js')
-                .then(reg => {
-                    reg.onupdatefound = () => {
-                        const sw = reg.installing;
-                        sw.onstatechange = () => { if (sw.state === 'installed' && navigator.serviceWorker.controller) showToast('Update available — refresh to apply', 5000); };
-                    };
-                }).catch(err => console.error('SW registration failed:', err));
+
+    document.getElementById('llm-controls').style.display = filtered.length > 0 ? 'block' : 'none';
+    renderCalendar();
+}
+
+/* =============================================================================
+ * 6. AI SUMMARY
+ * ============================================================================= */
+async function generateDailySummary() {
+    const btn    = document.getElementById('summarize-btn');
+    const status = document.getElementById('llm-status');
+    const output = document.getElementById('daily-summary-output');
+    btn.disabled = true;
+    try {
+        if (!engine) {
+            const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+            engine = await webllm.CreateMLCEngine(modelId, {
+                initProgressCallback: r => { status.textContent = r.text; }
+            });
         }
-    })();
-    </script>
+        // SECURITY: collect text via textContent (DOM nodes already safe), not innerHTML
+        const noteTexts = Array.from(document.querySelectorAll('#notes-list .note-item div'))
+            .map(el => el.textContent).join('\n- ');
+
+        const res = await engine.chat.completions.create({
+            messages: [
+                { role: 'system', content: 'You are an ADHD coach. Identify wins today to reduce anxiety. Be concise.' },
+                { role: 'user', content: noteTexts }
+            ]
+        });
+        // SECURITY: LLM output is untrusted — textContent only
+        output.textContent = res.choices[0].message.content;
+        status.textContent = '';
+    } catch (err) {
+        status.textContent = `Error loading model: ${err.message}`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+/* =============================================================================
+ * 7. SEARCH & TAGS
+ * ============================================================================= */
+function searchNotes() {
+    const rawQuery = document.getElementById('search-input').value.slice(0, 200);
+    const query    = rawQuery.toLowerCase();
+    const list     = document.getElementById('notes-list');
+    const cal      = document.getElementById('calendar');
+    const title    = document.getElementById('selected-date-title');
+
+    if (!query) {
+        cal.style.display = 'grid'; list.innerHTML = ''; title.textContent = ''; return;
+    }
+    cal.style.display = 'none';
+    title.textContent = `Search: "${rawQuery.slice(0, 50)}"`;
+
+    const filtered = getLocalNotes()
+        .filter(n => n.content.toLowerCase().includes(query))
+        .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    list.innerHTML = '';
+    filtered.forEach(n => {
+        const card = document.createElement('div');
+        card.className = 'note-item';
+        const dateEl = document.createElement('small');
+        dateEl.textContent = n.dateKey;
+
+        // SECURITY: Highlight via DOM manipulation, not string replace + innerHTML
+        const contentDiv = document.createElement('div');
+        const lower      = n.content.toLowerCase();
+        let last = 0, pos;
+        while ((pos = lower.indexOf(query, last)) !== -1) {
+            if (pos > last) contentDiv.appendChild(document.createTextNode(n.content.slice(last, pos)));
+            const mark = document.createElement('mark');
+            mark.textContent = n.content.slice(pos, pos + query.length);
+            contentDiv.appendChild(mark);
+            last = pos + query.length;
+        }
+        if (last < n.content.length) contentDiv.appendChild(document.createTextNode(n.content.slice(last)));
+
+        card.append(dateEl, contentDiv);
+        list.appendChild(card);
+    });
+    if (filtered.length === 0) {
+        const p = document.createElement('p'); p.textContent = 'No notes match your search.'; list.appendChild(p);
+    }
+}
+
+function renderTagCloud() {
+    const cloud = document.getElementById('tag-cloud');
+    const tags  = [...new Set(getLocalNotes().flatMap(n => n.tags || []))];
+    cloud.innerHTML = '';
+    tags.forEach(t => {
+        const btn = document.createElement('button');
+        btn.className = 'tag';
+        btn.textContent = t; // tags are pre-validated as /^#\w+$/
+        btn.addEventListener('click', () => filterByTag(t));
+        cloud.appendChild(btn);
+    });
+}
+
+function filterByTag(tag) {
+    if (!/^#\w+$/.test(tag)) return; // SECURITY: re-validate
+    const notes = getLocalNotes().filter(n => n.tags.includes(tag));
+    document.getElementById('calendar').style.display = 'none';
+    document.getElementById('selected-date-title').textContent = `Tag: ${tag}`;
+    const list = document.getElementById('notes-list');
+    list.innerHTML = '';
+    notes.forEach(n => {
+        const card = document.createElement('div');
+        card.className = 'note-item';
+        const dateEl = document.createElement('small'); dateEl.textContent = n.dateKey;
+        const body   = document.createElement('div');   body.textContent   = n.content;
+        card.append(dateEl, body);
+        list.appendChild(card);
+    });
+}
+
+/* =============================================================================
+ * 8. NAVIGATION & UTILITIES
+ * ============================================================================= */
+function showPage(pageId) {
+    if (!['home-page', 'history-page'].includes(pageId)) return;
+    document.getElementById('home-page').classList.toggle('hidden', pageId !== 'home-page');
+    document.getElementById('history-page').classList.toggle('hidden', pageId !== 'history-page');
+    document.getElementById('nav-write').classList.toggle('active', pageId === 'home-page');
+    document.getElementById('nav-history').classList.toggle('active', pageId === 'history-page');
+    if (pageId === 'history-page') {
+        renderAll();
+        document.getElementById('notes-list').innerHTML = '';
+        document.getElementById('calendar').style.display = 'grid';
+    }
+}
+
+function renderAll() { renderTagCloud(); renderCalendar(); }
+function changeMonth(dir) { currentMonth.setMonth(currentMonth.getMonth() + dir); renderCalendar(); }
+
+function exportNotes() {
+    const blob = new Blob([JSON.stringify(getLocalNotes(), null, 2)], { type: 'application/json' });
+    const a    = Object.assign(document.createElement('a'), {
+        href:     URL.createObjectURL(blob),
+        download: `journal-${getISODate(new Date())}.json`,
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+function importNotes(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 1_000_000) { showToast('File too large (max 1 MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = ev => {
+        const parsed = safeJSON(ev.target.result, null);
+        if (!Array.isArray(parsed)) { showToast('Invalid journal file'); return; }
+        const valid = parsed.map(validateNote).filter(Boolean);
+        if (valid.length === 0) { showToast('No valid notes found'); return; }
+        setLocalNotes(valid);
+        renderAll();
+        showToast(`Imported ${valid.length} notes ✓`);
+        e.target.value = ''; // Reset so same file can be re-imported
+    };
+    reader.readAsText(file);
+}
+
+/* =============================================================================
+ * 9. EVENT WIRING
+ * All handlers via addEventListener — no inline onclick attributes.
+ * This keeps the CSP tight and avoids global namespace pollution.
+ * ============================================================================= */
+document.getElementById('save-btn').addEventListener('click', () => saveNote());
+document.getElementById('focus-btn').addEventListener('click', startFocus);
+document.getElementById('complete-focus-btn').addEventListener('click', completeFocus);
+document.getElementById('nav-write').addEventListener('click', () => showPage('home-page'));
+document.getElementById('nav-history').addEventListener('click', () => showPage('history-page'));
+document.getElementById('nav-sync').addEventListener('click', handleAuthClick);
+document.getElementById('nav-theme').addEventListener('click', toggleDarkMode);
+document.getElementById('prev-month-btn').addEventListener('click', () => changeMonth(-1));
+document.getElementById('next-month-btn').addEventListener('click', () => changeMonth(1));
+document.getElementById('export-btn').addEventListener('click', exportNotes);
+document.getElementById('import-file').addEventListener('change', importNotes);
+document.getElementById('search-input').addEventListener('input', searchNotes);
+document.getElementById('summarize-btn').addEventListener('click', generateDailySummary);
+
+// Live character counter
+noteInput.addEventListener('input', () => {
+    const len = noteInput.value.length;
+    charCounter.textContent = `${len} / 5000`;
+    charCounter.classList.toggle('warn', len >= 4500);
+});
+
+// Keyboard shortcut: Ctrl/Cmd + Enter to save
+noteInput.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') saveNote();
+});
+
+/* =============================================================================
+ * 10. INIT
+ * ============================================================================= */
+window.addEventListener('load', initGIS);
+
+(function init() {
+    renderFocus();
+    updateLiveTimer();
+    updateStreakUI();
+    setInterval(updateLiveTimer, 30000);
+
+    // Dark mode: default dark; respect explicit saved preference
+    const saved  = localStorage.getItem('dark_mode');
+    const isDark = saved === null ? true : saved !== 'false';
+    document.body.classList.toggle('dark-mode', isDark);
+    document.getElementById('theme-icon').textContent = isDark ? '🌙' : '☀️';
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/InterstitialJournal/sw.js')
+            .then(reg => {
+                reg.onupdatefound = () => {
+                    const sw = reg.installing;
+                    sw.onstatechange = () => {
+                        if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+                            showToast('Update available — refresh to apply', 5000);
+                        }
+                    };
+                };
+            })
+            .catch(err => console.error('SW registration failed:', err));
+    }
+})();
+</script>
 </body>
 </html>
