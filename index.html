@@ -17,11 +17,15 @@
     -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'none';
-        script-src 'self' https://accounts.google.com/gsi/client https://esm.run 'unsafe-inline';
-        style-src 'self' 'unsafe-inline';
-        connect-src https://www.googleapis.com https://accounts.google.com https://esm.run https://cdn.jsdelivr.net;
+        script-src 'self' https://accounts.google.com/gsi/client
+                   https://cdn.jsdelivr.net 'unsafe-inline' 'wasm-unsafe-eval';
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        connect-src https://www.googleapis.com https://accounts.google.com
+                    https://cdn.jsdelivr.net
+                    https://huggingface.co https://*.huggingface.co
+                    https://hf.co https://*.hf.co;
         img-src 'self' data:;
-        font-src 'none';
+        font-src 'none' https://fonts.gstatic.com;
         object-src 'none';
         base-uri 'none';
         frame-ancestors 'none';
@@ -30,7 +34,7 @@
     <!-- SECURITY: Prevent browsers from sniffing MIME types -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <!-- SECURITY: No referrer leakage to external origins -->
-    <meta name="referrer" content="no-referrer">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
 
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <title>Interstitial Journal</title>
@@ -41,44 +45,64 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="journal_icon.png">
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <style>
         :root {
-            --bg: #f8f9fa;
-            --text: #1a1a1a;
-            --accent: #007aff;
+            --bg: #f5f4f0;
+            --text: #1a1814;
+            --accent: #3d6bff;
+            --accent-soft: rgba(61,107,255,0.12);
             --secondary: #ffffff;
-            --border: #e5e5ea;
+            --border: #e2e0db;
             --card-bg: #ffffff;
-            --success: #34c759;
-            --danger: #ff3b30;
+            --success: #1a9e5c;
+            --danger: #d63b2f;
+            --muted: #7a7670;
+            --surface2: #f0ede8;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+            --shadow-lg: 0 12px 40px rgba(0,0,0,0.12);
+            --radius-sm: 10px;
+            --radius-md: 16px;
+            --radius-lg: 22px;
         }
         body.dark-mode {
-            --bg: #121212;
-            --text: #f2f2f7;
-            --accent: #0a84ff;
-            --secondary: #1c1c1e;
-            --border: #2c2c2e;
-            --card-bg: #1c1c1e;
+            --bg: #111010;
+            --text: #f0ede8;
+            --accent: #5b84ff;
+            --accent-soft: rgba(91,132,255,0.15);
+            --secondary: #1e1d1c;
+            --border: #2a2825;
+            --card-bg: #1a1917;
+            --muted: #857f78;
+            --surface2: #1e1d1c;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
         }
+        * { box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
             background-color: var(--bg);
             color: var(--text);
             line-height: 1.6;
             margin: 0;
             display: flex;
             justify-content: center;
-            transition: background 0.2s;
-            padding-bottom: 80px;
+            transition: background 0.3s, color 0.3s;
+            padding-bottom: 88px;
+            min-height: 100dvh;
         }
         .container {
             width: 100%;
-            max-width: 500px;
-            padding-top: max(20px, env(safe-area-inset-top));
+            max-width: 520px;
+            padding-top: max(24px, env(safe-area-inset-top));
             padding-left: 20px;
             padding-right: 20px;
-            box-sizing: border-box;
         }
+        /* ── Bottom Nav ── */
         .bottom-nav {
             position: fixed;
             bottom: 0;
@@ -87,139 +111,187 @@
             background: var(--card-bg);
             display: flex;
             justify-content: space-around;
-            padding: 12px 0 calc(12px + env(safe-area-inset-bottom));
+            padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
             border-top: 1px solid var(--border);
             z-index: 1000;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+            box-shadow: 0 -1px 0 var(--border), 0 -8px 24px rgba(0,0,0,0.04);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }
         .nav-item {
             background: none;
             border: none;
-            color: var(--text);
-            font-size: 0.9rem;
+            color: var(--muted);
+            font-size: 0.72rem;
             font-weight: 600;
+            font-family: 'DM Sans', sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 4px;
-            opacity: 0.6;
+            gap: 3px;
             cursor: pointer;
+            padding: 6px 16px;
+            border-radius: var(--radius-sm);
+            transition: color 0.2s, background 0.2s;
+            letter-spacing: 0.02em;
         }
-        .nav-item.active { opacity: 1; color: var(--accent); }
+        .nav-item .nav-icon {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: background 0.2s, transform 0.15s;
+            font-size: 1.1rem;
+        }
+        .nav-item.active { color: var(--accent); }
+        .nav-item.active .nav-icon { background: var(--accent-soft); transform: scale(1.1); }
+        /* ── Cards ── */
         .note-item {
             background: var(--card-bg);
-            padding: 20px;
-            border-radius: 18px;
-            margin-bottom: 16px;
+            padding: 18px 20px;
+            border-radius: var(--radius-md);
+            margin-bottom: 4px;
             border: 1px solid var(--border);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-            animation: slideUp 0.3s ease-out;
+            box-shadow: var(--shadow-sm);
+            animation: slideUp 0.25s ease-out both;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
+        .note-item:hover { border-color: var(--accent); box-shadow: var(--shadow-md); }
         @keyframes slideUp {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        /* ── Textarea ── */
         textarea {
             width: 100%;
-            height: 200px;
-            padding: 20px;
-            border: 1px solid var(--border);
-            border-radius: 18px;
-            font-size: 1.05rem;
+            height: 180px;
+            padding: 18px 20px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-md);
+            font-size: 1rem;
+            font-family: 'DM Sans', sans-serif;
             resize: none;
-            box-sizing: border-box;
             outline: none;
             background: var(--card-bg);
             color: var(--text);
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
-            margin-bottom: 8px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 10px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            line-height: 1.7;
         }
+        textarea:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-sm);
+        }
+        textarea::placeholder { color: var(--muted); opacity: 0.7; }
+        /* ── Tags ── */
         .tag {
-            background: var(--secondary);
-            padding: 6px 12px;
-            border-radius: 10px;
-            font-size: 0.8rem;
+            background: var(--surface2);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.78rem;
+            font-weight: 600;
             border: 1px solid var(--border);
             margin-right: 6px;
+            margin-bottom: 6px;
             cursor: pointer;
-            font-family: inherit;
+            font-family: 'DM Sans', sans-serif;
+            color: var(--accent);
+            transition: background 0.2s, transform 0.15s;
+            letter-spacing: 0.01em;
         }
-        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 25px; }
+        .tag:hover { background: var(--accent-soft); transform: translateY(-1px); }
+        /* ── Calendar ── */
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 28px; }
         .calendar-day {
-            padding: 12px 0;
-            border-radius: 10px;
+            aspect-ratio: 1;
+            border-radius: 9px;
             cursor: pointer;
             text-align: center;
-            font-size: 0.9rem;
-            transition: all 0.2s ease;
-            border: 1px solid transparent;
+            font-size: 0.82rem;
+            font-weight: 500;
+            transition: all 0.15s ease;
+            border: 1.5px solid transparent;
             background: none;
             color: var(--text);
-            font-family: inherit;
+            font-family: 'DM Sans', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .calendar-day.lvl-1 { background-color: rgba(0, 122, 255, 0.15); }
-        .calendar-day.lvl-2 { background-color: rgba(0, 122, 255, 0.35); }
-        .calendar-day.lvl-3 { background-color: rgba(0, 122, 255, 0.65); color: white; }
-        .calendar-day.lvl-4 { background-color: rgba(0, 122, 255, 0.95); color: white; }
-        .calendar-day:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            border-color: var(--accent);
-        }
-        .hidden { display: none; }
+        .calendar-day.lvl-1 { background-color: rgba(61,107,255,0.12); color: var(--accent); }
+        .calendar-day.lvl-2 { background-color: rgba(61,107,255,0.28); color: var(--accent); font-weight: 700; }
+        .calendar-day.lvl-3 { background-color: rgba(61,107,255,0.55); color: white; font-weight: 700; }
+        .calendar-day.lvl-4 { background-color: var(--accent); color: white; font-weight: 700; box-shadow: 0 2px 8px rgba(61,107,255,0.35); }
+        .calendar-day:hover { transform: scale(1.08); border-color: var(--accent); box-shadow: var(--shadow-sm); }
+        .hidden { display: none !important; }
+        /* ── Primary Button ── */
         button.primary-btn {
             width: 100%;
-            padding: 16px;
-            border-radius: 14px;
-            font-size: 1rem;
-            border: 1px solid transparent;
+            padding: 15px;
+            border-radius: var(--radius-md);
+            font-size: 0.95rem;
+            border: none;
             background: var(--accent);
             color: white;
             font-weight: 700;
             cursor: pointer;
-            box-sizing: border-box;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: opacity 0.2s, transform 0.1s;
-            font-family: inherit;
+            gap: 6px;
+            transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+            font-family: 'DM Sans', sans-serif;
+            letter-spacing: 0.01em;
+            box-shadow: 0 2px 8px rgba(61,107,255,0.3);
         }
-        button.primary-btn:active { transform: scale(0.98); }
+        button.primary-btn:hover { opacity: 0.92; box-shadow: 0 4px 16px rgba(61,107,255,0.4); transform: translateY(-1px); }
+        button.primary-btn:active { transform: scale(0.98) translateY(0); }
+        /* ── Action links ── */
         .action-link {
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             font-weight: 600;
             cursor: pointer;
             background: none;
             border: none;
-            margin-right: 15px;
-            padding: 0;
-            font-family: inherit;
+            margin-right: 12px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-family: 'DM Sans', sans-serif;
+            transition: background 0.15s;
         }
         .delete-link { color: var(--danger); }
+        .delete-link:hover { background: rgba(214,59,47,0.1); }
         .edit-link { color: var(--accent); }
+        .edit-link:hover { background: var(--accent-soft); }
+        /* ── Footer buttons ── */
         .footer-btn {
             background: var(--card-bg);
-            border: 1px solid var(--border);
+            border: 1.5px solid var(--border);
             color: var(--text);
-            padding: 14px;
-            border-radius: 14px;
+            padding: 13px;
+            border-radius: var(--radius-md);
             flex: 1;
             font-weight: 600;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-sizing: border-box;
-            font-family: inherit;
-            font-size: 0.95rem;
-            transition: background 0.2s;
+            gap: 6px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.9rem;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
         }
-        .footer-btn:active { background: var(--secondary); transform: scale(0.98); }
+        .footer-btn:hover { border-color: var(--accent); background: var(--accent-soft); transform: translateY(-1px); }
+        .footer-btn:active { transform: scale(0.98); }
+        /* ── Streak ── */
         .streak-dot.filled {
             background-color: var(--success) !important;
             border-color: var(--success) !important;
-            box-shadow: 0 0 10px rgba(52, 199, 89, 0.4);
-            transform: scale(1.2);
+            box-shadow: 0 0 12px rgba(26,158,92,0.45);
+            transform: scale(1.25);
         }
         @keyframes pop {
             0% { transform: scale(0.8); opacity: 0; }
@@ -229,118 +301,375 @@
         .celebrate { animation: celebrate-pulse 0.5s infinite alternate; }
         @keyframes celebrate-pulse {
             from { transform: scale(1); }
-            to { transform: scale(1.05); }
+            to { transform: scale(1.04); }
         }
+        /* ── Notes timeline ── */
         #notes-list {
             position: relative;
             padding-left: 20px;
-            margin-left: 10px;
+            margin-left: 8px;
             border-left: 2px solid var(--border);
         }
         .time-gap-container {
             position: relative;
             display: flex;
             align-items: center;
-            margin: 10px 0;
-            left: -32px;
+            margin: 8px 0;
+            left: -30px;
             z-index: 10;
         }
         .duration-badge {
             background: var(--bg);
             color: var(--accent);
-            border: 2px solid var(--accent);
-            font-size: 0.7rem;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-weight: 800;
+            border: 1.5px solid var(--accent-soft);
+            font-size: 0.68rem;
+            padding: 2px 9px;
+            border-radius: 10px;
+            font-weight: 700;
             white-space: nowrap;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            letter-spacing: 0.02em;
         }
         .note-item {
             position: relative;
-            background: var(--card-bg);
             margin-left: 10px;
             z-index: 5;
         }
-
-        /* ---- Custom Modal (replaces prompt / confirm) ---- */
+        /* ── Modal ── */
         #modal-overlay {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.55);
+            background: rgba(0,0,0,0.45);
             z-index: 9000;
             align-items: center;
             justify-content: center;
             padding: 20px;
-            box-sizing: border-box;
-            backdrop-filter: blur(4px);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
         }
         #modal-overlay.visible { display: flex; }
         #modal-box {
             background: var(--card-bg);
-            border-radius: 20px;
-            padding: 28px 24px 20px;
+            border-radius: var(--radius-lg);
+            padding: 28px 24px 22px;
             width: 100%;
             max-width: 360px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+            box-shadow: var(--shadow-lg);
+            animation: modalIn 0.2s ease-out;
+            border: 1px solid var(--border);
         }
-        #modal-title { font-size: 1rem; font-weight: 700; margin-bottom: 12px; color: var(--text); }
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.95) translateY(8px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        #modal-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 12px; color: var(--text); }
         #modal-textarea {
             width: 100%;
             min-height: 120px;
-            padding: 12px;
-            border: 1px solid var(--border);
-            border-radius: 12px;
+            padding: 12px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
             background: var(--bg);
             color: var(--text);
-            font-family: inherit;
+            font-family: 'DM Sans', sans-serif;
             font-size: 1rem;
             resize: vertical;
-            box-sizing: border-box;
             margin-bottom: 16px;
+            transition: border-color 0.2s;
         }
+        #modal-textarea:focus { outline: none; border-color: var(--accent); }
         #modal-textarea.hidden { display: none; }
-        #modal-message { font-size: 0.95rem; margin-bottom: 16px; color: var(--text); opacity: 0.85; }
+        #modal-message { font-size: 0.92rem; margin-bottom: 16px; color: var(--muted); }
         #modal-message.hidden { display: none; }
         .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
         .modal-btn {
             padding: 10px 20px;
-            border-radius: 10px;
+            border-radius: var(--radius-sm);
             border: none;
             font-weight: 700;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
             cursor: pointer;
-            font-family: inherit;
+            font-family: 'DM Sans', sans-serif;
+            transition: opacity 0.2s, transform 0.15s;
         }
-        .modal-btn-cancel  { background: var(--border); color: var(--text); }
+        .modal-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+        .modal-btn-cancel  { background: var(--surface2); color: var(--text); }
         .modal-btn-confirm { background: var(--accent); color: white; }
         .modal-btn-danger  { background: var(--danger); color: white; }
-
-        /* ---- Toast ---- */
+        /* ── Toast ── */
         #toast {
             position: fixed;
-            bottom: 90px;
+            bottom: 96px;
             left: 50%;
-            transform: translateX(-50%) translateY(20px);
+            transform: translateX(-50%) translateY(12px);
             background: var(--text);
             color: var(--bg);
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-size: 0.85rem;
+            padding: 10px 22px;
+            border-radius: 22px;
+            font-size: 0.84rem;
             font-weight: 600;
             opacity: 0;
-            transition: opacity 0.3s, transform 0.3s;
+            transition: opacity 0.25s, transform 0.25s;
             pointer-events: none;
             z-index: 8000;
             white-space: nowrap;
+            box-shadow: var(--shadow-md);
         }
         #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-        /* ---- Char counter ---- */
-        #char-counter { font-size: 0.75rem; opacity: 0.5; text-align: right; margin-bottom: 12px; }
-        #char-counter.warn { color: var(--danger); opacity: 1; }
+        /* ── Char counter ── */
+        #char-counter { font-size: 0.72rem; color: var(--muted); text-align: right; margin-bottom: 12px; }
+        #char-counter.warn { color: var(--danger); }
+        /* ── AI Summary Box ── */
+        #llm-controls {
+            margin-bottom: 24px;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-md);
+        }
+        .llm-header {
+            background: linear-gradient(135deg, #3d6bff 0%, #7b5cff 100%);
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .llm-header-title {
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.8);
+        }
+        #summarize-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1.5px solid rgba(255,255,255,0.35);
+            padding: 9px 18px;
+            border-radius: var(--radius-sm);
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+            transition: background 0.2s, transform 0.15s;
+            white-space: nowrap;
+        }
+        #summarize-btn:hover { background: rgba(255,255,255,0.3); transform: translateY(-1px); }
+        #summarize-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        #llm-status {
+            font-size: 0.75rem;
+            color: var(--muted);
+            padding: 8px 16px 4px;
+            text-align: center;
+            background: var(--surface2);
+            min-height: 0;
+        }
+        #daily-summary-output {
+            background: var(--card-bg);
+            padding: 0;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease, padding 0.3s ease;
+        }
+        #daily-summary-output.has-content {
+            padding: 20px;
+            max-height: 600px;
+        }
+        /* Summary structured sections */
+        .summary-section { margin-bottom: 18px; }
+        .summary-section:last-child { margin-bottom: 0; }
+        .summary-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .summary-wins {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .summary-win-item {
+            background: rgba(26,158,92,0.08);
+            border: 1px solid rgba(26,158,92,0.2);
+            border-radius: var(--radius-sm);
+            padding: 9px 13px;
+            font-size: 0.88rem;
+            line-height: 1.5;
+            color: var(--text);
+        }
+        .summary-themes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .summary-theme-chip {
+            background: var(--accent-soft);
+            color: var(--accent);
+            border: 1px solid rgba(61,107,255,0.2);
+            padding: 4px 11px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .summary-focus-text {
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: var(--text);
+            background: var(--surface2);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+        }
+        /* ── Search ── */
+        .search-wrapper {
+            position: relative;
+            margin-bottom: 24px;
+        }
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.9rem;
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        #search-input {
+            width: 100%;
+            padding: 13px 16px 13px 40px;
+            border-radius: var(--radius-md);
+            border: 1.5px solid var(--border);
+            background: var(--card-bg);
+            color: var(--text);
+            font-size: 0.95rem;
+            font-family: 'DM Sans', sans-serif;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        #search-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+        #search-input::placeholder { color: var(--muted); }
+        /* ── Section headers ── */
+        .section-header {
+            font-family: 'Instrument Serif', Georgia, serif;
+            font-size: 1.7rem;
+            font-weight: 400;
+            margin: 0 0 22px 0;
+            line-height: 1.2;
+        }
+        .section-subheader {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 10px;
+        }
+        /* ── Focus card ── */
+        .focus-card {
+            background: var(--card-bg);
+            border: 1.5px solid var(--accent);
+            border-radius: var(--radius-lg);
+            padding: 18px 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-md);
+        }
+        /* ── Time nudge ── */
+        #time-blindness-nudge {
+            text-align: center;
+            font-size: 0.78rem;
+            color: var(--muted);
+            margin-bottom: 18px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+        /* ── Spinne animation for loading ── */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.4);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+        }
+        /* ── AI on-device model UI ── */
+        .model-picker-row {
+            display: flex;
+            gap: 8px;
+            padding: 12px 16px;
+            background: var(--surface2);
+            border-top: 1px solid var(--border);
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .model-select {
+            flex: 1;
+            min-width: 0;
+            background: var(--card-bg);
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 8px 10px;
+            font-size: 0.8rem;
+            font-family: 'DM Sans', sans-serif;
+            color: var(--text);
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .model-select:focus { outline: none; border-color: var(--accent); }
+        .model-dl-note {
+            font-size: 0.72rem;
+            color: var(--muted);
+            width: 100%;
+            line-height: 1.4;
+            padding: 0 2px;
+        }
+        /* Download progress bar */
+        .dl-progress-wrap {
+            padding: 10px 16px 14px;
+            background: var(--surface2);
+            border-top: 1px solid var(--border);
+        }
+        .dl-progress-label {
+            font-size: 0.74rem;
+            color: var(--muted);
+            margin-bottom: 6px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+        }
+        .dl-progress-bar-outer {
+            height: 5px;
+            background: var(--border);
+            border-radius: 99px;
+            overflow: hidden;
+        }
+        .dl-progress-bar-inner {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #7b5cff);
+            border-radius: 99px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        /* Misc */
+        small { color: var(--muted); font-size: 0.78rem; }
+        mark { background: rgba(61,107,255,0.2); color: var(--accent); border-radius: 3px; padding: 0 2px; }
+        .note-actions { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; gap: 4px; }
     </style>
+    <!-- Import map: resolves bare specifier used inside Transformers.js v3 -->
+    <script type="importmap">
+    {
+        "imports": {
+            "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3/dist/transformers.min.js"
+        }
+    }
+    </script>
 </head>
 <body class="dark-mode">
 
@@ -361,57 +690,79 @@
 
 <div class="container">
     <div id="home-page">
-        <div id="time-blindness-nudge" style="text-align:center;font-size:0.8rem;opacity:0.7;margin-bottom:15px;font-weight:600;"></div>
-        <div id="focus-section" class="hidden" style="margin-bottom:30px;">
-            <div class="note-item" style="border:2px solid var(--accent);box-shadow:0 0 20px rgba(0,122,255,0.15);border-left:6px solid var(--accent);">
+        <div id="time-blindness-nudge"></div>
+        <div id="focus-section" class="hidden">
+            <div class="focus-card" style="margin-bottom:24px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <small style="color:var(--accent);font-weight:800;text-transform:uppercase;letter-spacing:0.05rem;">Current Focus</small>
-                    <span class="duration-badge" id="focus-timer" style="margin:0;">0m</span>
+                    <span style="font-size:0.68rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);">Current Focus</span>
+                    <span class="duration-badge" id="focus-timer">0m</span>
                 </div>
-                <div id="focus-text" style="font-size:1.1rem;font-weight:500;margin-bottom:15px;"></div>
-                <button class="action-link edit-link" id="complete-focus-btn" style="font-size:0.9rem;">✅ Mark as Finished</button>
+                <div id="focus-text" style="font-size:1.05rem;font-weight:500;margin-bottom:14px;line-height:1.5;"></div>
+                <button class="action-link edit-link" id="complete-focus-btn" style="font-size:0.85rem;padding:6px 12px;border-radius:8px;background:rgba(61,107,255,0.1);">✅ Mark as Finished</button>
             </div>
         </div>
-        <div id="streak-container" style="margin-bottom:20px;text-align:center;">
-            <div style="font-size:0.7rem;font-weight:800;opacity:0.6;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.1rem;">Dopamine Streak</div>
-            <div id="streak-dots" style="display:flex;justify-content:center;gap:10px;">
-                <div class="streak-dot" id="dot-1" style="width:12px;height:12px;border-radius:50%;border:2px solid var(--border);"></div>
-                <div class="streak-dot" id="dot-2" style="width:12px;height:12px;border-radius:50%;border:2px solid var(--border);"></div>
-                <div class="streak-dot" id="dot-3" style="width:12px;height:12px;border-radius:50%;border:2px solid var(--border);"></div>
+        <div id="streak-container" style="margin-bottom:22px;text-align:center;">
+            <div class="section-subheader">Dopamine Streak</div>
+            <div id="streak-dots" style="display:flex;justify-content:center;gap:12px;margin-bottom:6px;">
+                <div class="streak-dot" id="dot-1" style="width:11px;height:11px;border-radius:50%;border:2px solid var(--border);transition:all 0.3s;"></div>
+                <div class="streak-dot" id="dot-2" style="width:11px;height:11px;border-radius:50%;border:2px solid var(--border);transition:all 0.3s;"></div>
+                <div class="streak-dot" id="dot-3" style="width:11px;height:11px;border-radius:50%;border:2px solid var(--border);transition:all 0.3s;"></div>
             </div>
-            <div id="streak-message" class="hidden" style="margin-top:10px;font-size:0.9rem;font-weight:700;color:var(--success);animation:pop 0.3s ease;"></div>
+            <div id="streak-message" class="hidden" style="font-size:0.88rem;font-weight:700;color:var(--success);animation:pop 0.3s ease;"></div>
         </div>
-        <h1 style="margin-bottom:25px;">How's it going?</h1>
-        <textarea id="note-input" placeholder="Start typing... use #tags for projects" maxlength="5000" aria-label="Journal note"></textarea>
+        <h1 class="section-header">How's it going?</h1>
+        <textarea id="note-input" placeholder="What are you working on? Use #tags for projects..." maxlength="5000" aria-label="Journal note"></textarea>
         <div id="char-counter">0 / 5000</div>
-        <div style="display:flex;gap:12px;width:100%;margin-top:4px;">
+        <div style="display:flex;gap:10px;width:100%;margin-top:2px;">
             <button class="primary-btn" id="save-btn" style="flex:1;">💾 Save Note</button>
-            <button class="primary-btn" id="focus-btn" style="flex:1;background:var(--secondary);color:var(--accent);border-color:var(--accent);">🎯 Focus</button>
+            <button class="primary-btn" id="focus-btn" style="flex:1;background:var(--surface2);color:var(--accent);border:1.5px solid var(--accent);box-shadow:none;">🎯 Focus</button>
         </div>
     </div>
 
     <div id="history-page" class="hidden">
-        <div class="calendar-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-            <h2 id="month-display" style="margin:0;font-size:1.1rem;"></h2>
-            <div style="display:flex;gap:8px;">
-                <button id="prev-month-btn" aria-label="Previous month" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);cursor:pointer;font-family:inherit;">‹</button>
-                <button id="next-month-btn" aria-label="Next month" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);cursor:pointer;font-family:inherit;">›</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;">
+            <h2 id="month-display" style="margin:0;font-family:'Instrument Serif',serif;font-size:1.5rem;font-weight:400;"></h2>
+            <div style="display:flex;gap:6px;">
+                <button id="prev-month-btn" aria-label="Previous month" style="padding:7px 13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--card-bg);color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:0.9rem;transition:border-color 0.2s;">‹</button>
+                <button id="next-month-btn" aria-label="Next month" style="padding:7px 13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--card-bg);color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:0.9rem;transition:border-color 0.2s;">›</button>
             </div>
         </div>
-        <div id="tag-cloud" style="margin-bottom:25px;display:flex;flex-wrap:wrap;gap:8px;"></div>
-        <input type="search" id="search-input" placeholder="Search your thoughts..." aria-label="Search notes"
-               style="width:100%;padding:14px;border-radius:14px;border:1px solid var(--border);margin-bottom:25px;box-sizing:border-box;background:var(--card-bg);color:var(--text);font-size:1rem;font-family:inherit;">
+        <div id="tag-cloud" style="margin-bottom:22px;display:flex;flex-wrap:wrap;gap:6px;"></div>
+        <div class="search-wrapper">
+            <span class="search-icon">🔍</span>
+            <input type="search" id="search-input" placeholder="Search your thoughts..." aria-label="Search notes">
+        </div>
         <div id="calendar" class="calendar-grid"></div>
         <div id="day-notes">
-            <div id="llm-controls" style="margin-bottom:25px;padding:20px;background:var(--accent);color:white;border-radius:18px;display:none;">
-                <button id="summarize-btn" style="background:white;color:var(--accent);border:none;padding:10px 18px;border-radius:10px;font-weight:700;width:100%;cursor:pointer;font-family:inherit;">✨ Summarize This Day</button>
-                <div id="llm-status" style="font-size:0.7rem;margin-top:8px;text-align:center;opacity:0.9;"></div>
-                <div id="daily-summary-output" style="margin-top:15px;font-size:0.95rem;line-height:1.6;white-space:pre-wrap;background:rgba(255,255,255,0.1);padding:15px;border-radius:12px;"></div>
+            <div id="llm-controls" style="display:none;">
+                <div class="llm-header">
+                    <span class="llm-header-title">✨ AI Day Summary</span>
+                    <button id="summarize-btn">Summarize</button>
+                </div>
+                <div id="llm-status"></div>
+                <div class="model-picker-row">
+                    <select class="model-select" id="model-select" aria-label="Choose AI model">
+                        <option value="onnx-community/Qwen2.5-0.5B-Instruct" data-size="~300 MB">Qwen2.5 0.5B — fast &amp; light (~300 MB)</option>
+                        <option value="HuggingFaceTB/SmolLM2-360M-Instruct" data-size="~200 MB">SmolLM2 360M — smallest (~200 MB)</option>
+                        <option value="onnx-community/Qwen2.5-1.5B-Instruct" data-size="~900 MB">Qwen2.5 1.5B — best quality (~900 MB)</option>
+                    </select>
+                    <span class="model-dl-note" id="model-dl-note">⬇️ Model downloads once, then runs offline forever.</span>
+                </div>
+                <div class="dl-progress-wrap" id="dl-progress-wrap" style="display:none;">
+                    <div class="dl-progress-label">
+                        <span id="dl-progress-text">Loading model…</span>
+                        <span id="dl-progress-pct">0%</span>
+                    </div>
+                    <div class="dl-progress-bar-outer">
+                        <div class="dl-progress-bar-inner" id="dl-progress-bar"></div>
+                    </div>
+                </div>
+                <div id="daily-summary-output"></div>
             </div>
-            <h3 id="selected-date-title" style="font-size:0.9rem;color:#8e8e93;margin-bottom:15px;text-transform:uppercase;letter-spacing:0.05rem;"></h3>
+            <h3 id="selected-date-title" style="font-size:0.78rem;color:var(--muted);margin-bottom:16px;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;"></h3>
             <div id="notes-list"></div>
         </div>
-        <div class="storage-footer" style="display:flex;gap:12px;margin-top:40px;padding-bottom:60px;">
+        <div class="storage-footer" style="display:flex;gap:10px;margin-top:40px;padding-bottom:60px;">
             <button id="export-btn" class="footer-btn">📤 Export</button>
             <label class="footer-btn" style="cursor:pointer;">
                 📥 Import
@@ -422,17 +773,17 @@
 
     <nav class="bottom-nav" aria-label="Main navigation">
         <button class="nav-item active" id="nav-write" aria-label="Write">
-            <span style="font-size:1.2rem;" aria-hidden="true">✍️</span> Write
+            <span class="nav-icon" aria-hidden="true">✍️</span> Write
         </button>
         <button class="nav-item" id="nav-history" aria-label="History">
-            <span style="font-size:1.2rem;" aria-hidden="true">📚</span> History
+            <span class="nav-icon" aria-hidden="true">📚</span> History
         </button>
         <button class="nav-item" id="nav-sync" aria-label="Sync with Google Drive">
-            <span id="sync-icon" style="font-size:1.2rem;" aria-hidden="true">☁️</span>
+            <span class="nav-icon" id="sync-icon" aria-hidden="true">☁️</span>
             <span id="sync-text">Sync</span>
         </button>
         <button class="nav-item" id="nav-theme" aria-label="Toggle appearance">
-            <span id="theme-icon" style="font-size:1.2rem;" aria-hidden="true">🌙</span> Appearance
+            <span class="nav-icon" id="theme-icon" aria-hidden="true">🌙</span> Theme
         </button>
     </nav>
 </div>
@@ -563,8 +914,6 @@ let isSyncing    = false; // Mutex: prevents concurrent overlapping syncs
 let currentMonth = new Date();
 const noteInput  = document.getElementById('note-input');
 const charCounter = document.getElementById('char-counter');
-let engine = null;
-const modelId = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
 
 const getISODate = d => {
     const dt = new Date(d);
@@ -1007,39 +1356,246 @@ function showNotesForDay(dateKey) {
 }
 
 /* =============================================================================
- * 6. AI SUMMARY
+ * 6. AI SUMMARY — 100% On-Device via Transformers.js v3
+ *
+ * Works on localhost AND GitHub Pages.
+ *
+ * The importmap in <head> maps '@huggingface/transformers' to the jsDelivr
+ * CDN URL, so `import { pipeline, env }` resolves correctly at runtime.
+ * The script tag is type="module" so the import() works.
+ *
+ * env.backends.onnx.wasm.wasmPaths tells ORT where to find its .wasm files
+ * (same CDN dist/ folder) — without this it looks at the page origin → 404.
+ *
+ * yieldToMain() yields between heavy steps so the browser stays responsive.
  * ============================================================================= */
-async function generateDailySummary() {
-    const btn    = document.getElementById('summarize-btn');
-    const status = document.getElementById('llm-status');
-    const output = document.getElementById('daily-summary-output');
-    btn.disabled = true;
-    try {
-        if (!engine) {
-            const webllm = await import('https://esm.run/@mlc-ai/web-llm');
-            engine = await webllm.CreateMLCEngine(modelId, {
-                initProgressCallback: r => { status.textContent = r.text; }
-            });
-        }
-        // SECURITY: collect text via textContent (DOM nodes already safe), not innerHTML
-        const noteTexts = Array.from(document.querySelectorAll('#notes-list .note-item div'))
-            .map(el => el.textContent).join('\n- ');
 
-        const res = await engine.chat.completions.create({
-            messages: [
-                { role: 'system', content: 'You are an ADHD coach. Identify wins today to reduce anxiety. Be concise.' },
-                { role: 'user', content: noteTexts }
-            ]
-        });
-        // SECURITY: LLM output is untrusted — textContent only
-        output.textContent = res.choices[0].message.content;
-        status.textContent = '';
-    } catch (err) {
-        status.textContent = `Error loading model: ${err.message}`;
-    } finally {
-        btn.disabled = false;
+let _pipeline    = null;
+let _loadedModel = null;
+
+/** Yield to the browser — prevents "Page Unresponsive" during heavy work. */
+function yieldToMain() {
+    if (typeof scheduler !== 'undefined' && scheduler.yield) return scheduler.yield();
+    return new Promise(function(r) { setTimeout(r, 0); });
+}
+
+async function loadModel(modelId, onProgress) {
+    if (_pipeline && _loadedModel === modelId) return _pipeline;
+
+    // importmap resolves this to the full CDN URL
+    const { pipeline, env } = await import('@huggingface/transformers');
+
+    // Tell ORT where its own WASM runtime files are — same CDN, same version.
+    // Without this it tries to load ort-wasm*.wasm from the page origin → 404.
+    env.backends.onnx.wasm.wasmPaths =
+        'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3/dist/';
+    env.allowRemoteModels = true;
+    env.allowLocalModels  = false;
+    env.useBrowserCache   = true;
+
+    await yieldToMain();
+
+    // Try WebGPU (fast GPU), fall back to wasm (universal CPU)
+    for (const [device, dtype] of [['webgpu', 'q4'], ['wasm', 'q4']]) {
+        try {
+            if (device === 'wasm') {
+                onProgress({ _msg: 'No GPU — switching to CPU (1-2 min first time)...' });
+                await yieldToMain();
+            }
+            _pipeline = await pipeline('text-generation', modelId, {
+                dtype,
+                device,
+                progress_callback: onProgress,
+            });
+            _loadedModel = modelId;
+            return _pipeline;
+        } catch (err) {
+            console.warn('device=' + device + ' failed:', err.message);
+            if (device === 'wasm') throw err;
+        }
     }
 }
+
+/* ── UI helpers ─────────────────────────────────────────────────────────────── */
+function setDlProgress(text, pct) {
+    const wrap  = document.getElementById('dl-progress-wrap');
+    const bar   = document.getElementById('dl-progress-bar');
+    const label = document.getElementById('dl-progress-text');
+    const pctEl = document.getElementById('dl-progress-pct');
+    wrap.style.display = 'block';
+    label.textContent  = text;
+    if (pct != null) { bar.style.width = pct + '%';  pctEl.textContent = pct + '%'; }
+    else             { bar.style.width = '100%';      pctEl.textContent = '...'; }
+}
+
+function hideDlProgress() {
+    document.getElementById('dl-progress-wrap').style.display = 'none';
+}
+
+function onModelProgress(p) {
+    if (p._msg)                                             { setDlProgress(p._msg, null);           return; }
+    if (p.status === 'initiate')                            { setDlProgress('Starting...', 0);       return; }
+    if (p.status === 'progress' || p.status === 'download') {
+        const pct  = p.total > 0 ? Math.round(p.loaded / p.total * 100) : null;
+        const name = p.file ? p.file.split('/').pop() : 'model';
+        setDlProgress('Downloading ' + name + '...', pct);
+        return;
+    }
+    if (p.status === 'done')    { setDlProgress('Almost ready...', null);        return; }
+    if (p.status === 'loading') { setDlProgress('Loading into memory...', null); }
+}
+
+/* ── Main entry point ───────────────────────────────────────────────────────── */
+async function generateDailySummary() {
+    const btn     = document.getElementById('summarize-btn');
+    const status  = document.getElementById('llm-status');
+    const output  = document.getElementById('daily-summary-output');
+    const modelId = document.getElementById('model-select').value;
+
+    btn.disabled  = true;
+    btn.innerHTML = '<span class="spinner"></span> Working...';
+    status.textContent = '';
+    output.classList.remove('has-content');
+    output.innerHTML = '';
+
+    // Collect notes safely — textContent only, no XSS risk
+    const noteCards = Array.from(document.querySelectorAll('#notes-list .note-item'));
+    const noteTexts = noteCards.map(function(card) {
+        const time = card.querySelector('small') ? card.querySelector('small').textContent : '';
+        const body = card.querySelector('div')   ? card.querySelector('div').textContent   : '';
+        return '[' + time + '] ' + body.trim();
+    }).filter(Boolean);
+
+    if (noteTexts.length === 0) {
+        status.textContent = 'No notes found for this day.';
+        btn.disabled = false; btn.textContent = 'Summarize';
+        return;
+    }
+
+    try {
+        setDlProgress('Loading model...', 0);
+        await yieldToMain();
+
+        const gen = await loadModel(modelId, onModelProgress);
+        hideDlProgress();
+        status.textContent = 'Generating summary...';
+        await yieldToMain();
+
+        const noteCount = noteTexts.length;
+        const joined    = noteTexts.map(function(t, i) { return (i + 1) + '. ' + t; }).join('\n');
+        const truncated = joined.length > 1000 ? joined.slice(0, 1000) + '...' : joined;
+
+        // Three focused prompts — much more reliable on small models than JSON
+        async function ask(question, maxTokens) {
+            await yieldToMain();
+            const prompt = 'Notes from today:\n' + truncated +
+                           '\n\nQuestion: ' + question + '\nAnswer:';
+            return gen(prompt, {
+                max_new_tokens:     maxTokens,
+                temperature:        0.1,
+                repetition_penalty: 1.4,
+                do_sample:          false,
+                return_full_text:   false,
+            });
+        }
+
+        function getText(out) {
+            const gt  = out && out[0] && out[0].generated_text;
+            const raw = (Array.isArray(gt)
+                ? ((gt[gt.length - 1] && gt[gt.length - 1].content) || '')
+                : (typeof gt === 'string' ? gt : '')
+            ).trim();
+            return raw.split(/\n\s*\n/)[0].trim().slice(0, 350);
+        }
+
+        const winsOut   = await ask('What tasks or goals were completed today? List each on its own line, no bullets, max 4 items:', 90);
+        const themesOut = await ask('What are 2-4 one-word topic tags for today? Comma-separated only:', 30);
+        const reflOut   = await ask('In one sentence, what was the overall mood or progress of this day?', 60);
+
+        const wins = getText(winsOut)
+            .split('\n')
+            .map(function(s) { return s.replace(/^[\s\d.\-*]+/, '').trim(); })
+            .filter(function(s) { return s.length > 3 && s.length < 120; })
+            .slice(0, 4);
+
+        const themes = getText(themesOut)
+            .split(/,|\n/)
+            .map(function(s) { return s.replace(/[#.'"[\]\d]/g, '').trim().toLowerCase(); })
+            .filter(function(s) { return s.length > 1 && s.length < 25; })
+            .slice(0, 5);
+
+        const reflection = getText(reflOut);
+
+        renderSummary({ wins: wins, themes: themes, reflection: reflection, note_count: noteCount }, output);
+        status.textContent = '';
+
+    } catch (err) {
+        hideDlProgress();
+        status.textContent = 'Error: ' + (err.message || String(err));
+        console.error('AI summary error:', err);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Summarize';
+    }
+}
+
+/* ── Render ─────────────────────────────────────────────────────────────────── */
+function renderSummary(data, container) {
+    container.innerHTML = '';
+    container.classList.add('has-content');
+
+    function makeSection(emoji, label, buildFn) {
+        const sec = document.createElement('div'); sec.className = 'summary-section';
+        const lbl = document.createElement('div'); lbl.className = 'summary-label';
+        lbl.textContent = emoji + '  ' + label;
+        sec.appendChild(lbl); buildFn(sec); container.appendChild(sec);
+    }
+
+    function toStr(v) {
+        if (typeof v === 'string') return v.trim();
+        if (v && typeof v === 'object') return String(Object.values(v)[0] || '').trim();
+        return '';
+    }
+
+    const wins = (Array.isArray(data.wins) ? data.wins : []).map(toStr).filter(function(s) { return s.length > 2; });
+    if (wins.length) {
+        makeSection('\u{1F3C6}', 'Wins', function(sec) {
+            const wrap = document.createElement('div'); wrap.className = 'summary-wins';
+            wins.forEach(function(w) {
+                const el = document.createElement('div'); el.className = 'summary-win-item';
+                el.textContent = w.slice(0, 150); wrap.appendChild(el);
+            });
+            sec.appendChild(wrap);
+        });
+    }
+
+    const themes = (Array.isArray(data.themes) ? data.themes : []).map(toStr).filter(function(s) { return s.length > 1; });
+    if (themes.length) {
+        makeSection('\u{1F5C2}', 'Themes', function(sec) {
+            const wrap = document.createElement('div'); wrap.className = 'summary-themes';
+            themes.forEach(function(t) {
+                const chip = document.createElement('span'); chip.className = 'summary-theme-chip';
+                chip.textContent = t.slice(0, 25); wrap.appendChild(chip);
+            });
+            sec.appendChild(wrap);
+        });
+    }
+
+    const refl = typeof data.reflection === 'string' ? data.reflection.trim() : '';
+    if (refl) {
+        makeSection('\u{1F4AD}', 'Reflection', function(sec) {
+            const el = document.createElement('div'); el.className = 'summary-focus-text';
+            el.textContent = refl.slice(0, 400); sec.appendChild(el);
+        });
+    }
+
+    const foot = document.createElement('div');
+    foot.style.cssText = 'font-size:0.72rem;color:var(--muted);margin-top:14px;text-align:right;';
+    const nc = Number.isFinite(Number(data.note_count)) ? Number(data.note_count) : '?';
+    foot.textContent = 'Based on ' + nc + ' note' + (nc !== 1 ? 's' : '') + ' \u00b7 100% on-device';
+    container.appendChild(foot);
+}
+
 
 /* =============================================================================
  * 7. SEARCH & TAGS
@@ -1184,6 +1740,22 @@ document.getElementById('export-btn').addEventListener('click', exportNotes);
 document.getElementById('import-file').addEventListener('change', importNotes);
 document.getElementById('search-input').addEventListener('input', searchNotes);
 document.getElementById('summarize-btn').addEventListener('click', generateDailySummary);
+
+// Update size note when model selection changes
+// Update size note when model selection changes
+document.getElementById('model-select').addEventListener('change', function() {
+    const opt  = this.options[this.selectedIndex];
+    const size = opt.getAttribute('data-size') || '';
+    document.getElementById('model-dl-note').textContent =
+        `⬇️ ${size} download once, then runs offline forever.`;
+    // Reset cached pipeline so new model loads on next click
+    _pipeline = null;
+    _loadedModel = null;
+    document.getElementById('daily-summary-output').innerHTML = '';
+    document.getElementById('daily-summary-output').classList.remove('has-content');
+    document.getElementById('llm-status').textContent = '';
+    hideDlProgress();
+});
 
 // Live character counter
 noteInput.addEventListener('input', () => {
