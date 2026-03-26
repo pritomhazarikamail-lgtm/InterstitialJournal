@@ -368,7 +368,7 @@
 
 <script type="module">
     /* -------------------------------------------------------------------------- */
-    /* 1. CONFIG & GOOGLE IDENTITY                                                */
+    /* 1. CONFIG & GLOBAL STATE                                                   */
     /* -------------------------------------------------------------------------- */
     const CLIENT_ID = '629370111704-m36nu5qgi52071qgp0sfsbs5sa9ac80k.apps.googleusercontent.com';
     const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
@@ -385,104 +385,107 @@
     };
 
     /* -------------------------------------------------------------------------- */
-    /* 2. GOOGLE DRIVE SYNC                                                       */
+    /* 2. GOOGLE DRIVE SYNC (Last Writer Wins & Multipart Fix)                    */
     /* -------------------------------------------------------------------------- */
     function initGIS() {
-        if (!window.google || !google.accounts) {
-            console.error("Google SDK not loaded");
-            return;
-        }
-
+        if (!window.google || !google.accounts) return;
         tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: CLIENT_ID,
             scope: SCOPES,
             callback: async (response) => {
-                console.log("AUTH RESPONSE:", response);
-
                 if (response.error) {
-                    console.error("AUTH ERROR:", response);
                     document.getElementById('sync-text').innerText = 'Auth Error';
                     return;
                 }
-
                 accessToken = response.access_token;
-                document.getElementById('sync-text').innerText = 'Syncing...';
                 await syncWithDrive();
             },
         });
     }
-    async function handleAuthClick() {
-        if (!tokenClient) {
-            console.error("Token client not initialized");
-            return;
-        }
 
-        if (!accessToken) {
-            tokenClient.requestAccessToken({ prompt: 'consent' });
-        } else {
-            await syncWithDrive();
-        }
+    async function handleAuthClick() {
+        if (!accessToken) tokenClient.requestAccessToken({ prompt: 'consent' });
+        else await syncWithDrive();
     }
 
     async function syncWithDrive() {
-    const syncText = document.getElementById('sync-text');
-    const syncIcon = document.getElementById('sync-icon');
-    
-    try {
-        syncText.innerText = 'Syncing...';
-        syncIcon.innerText = '⏳';
+        const syncText = document.getElementById('sync-text');
+        const syncIcon = document.getElementById('sync-icon');
+        try {
+            syncText.innerText = 'Syncing...';
+            syncIcon.innerText = '⏳';
 
-        const res = await fetch("https://www.googleapis.com/drive/v3/files?q=name='journal_data.json'&spaces=appDataFolder", {
-            headers: { Authorization: `Bearer ${accessToken}` }
-        });
-        const { files } = await res.json();
-        
-        if (files.length > 0) {
-            driveFileId = files[0].id;
-            const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
+            const res = await fetch("https://www.googleapis.com/drive/v3/files?q=name='journal_data.json'&spaces=appDataFolder", {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
-            const driveNotes = await fileRes.json();
-            mergeNotes(driveNotes);
+            const { files } = await res.json();
+            
+            if (files.length > 0) {
+                driveFileId = files[0].id;
+                const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
+                    headers: { Authorization: `Bearer ${accessToken}` }
+                });
+                const driveNotes = await fileRes.json();
+                mergeNotes(driveNotes);
+            }
+            
+            await uploadToDrive();
+            syncIcon.innerText = '✅';
+            syncText.innerText = 'Synced ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        } catch (err) {
+            syncText.innerText = 'Sync Error';
+            syncIcon.innerText = '❌';
         }
-        
-        await uploadToDrive();
-        
-        // Success Feedback
-        syncIcon.innerText = '✅';
-        syncText.innerText = 'Synced ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-        localStorage.setItem('last_sync_time', new Date().toISOString());
-    } catch (err) {
-        console.error('Sync failed:', err);
-        syncIcon.innerText = '❌';
-        syncText.innerText = 'Sync Error';
     }
-}
 
     async function uploadToDrive() {
         if (!accessToken) return;
         const localData = localStorage.getItem('journal_notes') || '[]';
         const metadata = { name: 'journal_data.json', parents: ['appDataFolder'] };
-        const formData = new FormData();
-        formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        formData.append('file', new Blob([localData], { type: 'application/json' }));
-        const url = driveFileId ? `https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=multipart` : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
-        const res = await fetch(url, { method: driveFileId ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${accessToken}` }, body: formData });
+
+        const boundary = 'sync_boundary_journal';
+        const delimiter = "\r\n--" + boundary + "\r\n";
+        const close_delim = "\r\n--" + boundary + "--";
+        const multipartBody = 
+            delimiter + 'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) +
+            delimiter + 'Content-Type: application/json\r\n\r\n' + localData +
+            close_delim;
+
+        const url = driveFileId 
+            ? `https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=multipart`
+            : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+
+        const res = await fetch(url, {
+            method: driveFileId ? 'PATCH' : 'POST',
+            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'multipart/related; boundary=' + boundary },
+            body: multipartBody
+        });
         if (!driveFileId) driveFileId = (await res.json()).id;
     }
 
     function mergeNotes(driveNotes) {
         const localNotes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
-        const merged = [...localNotes, ...driveNotes].reduce((acc, current) => {
-            if (!acc.find(item => item.id === current.id)) acc.push(current);
-            return acc;
-        }, []);
-        localStorage.setItem('journal_notes', JSON.stringify(merged));
+        const allNotes = [...localNotes, ...driveNotes];
+        const mergedMap = new Map();
+        
+        allNotes.forEach(note => {
+            const existing = mergedMap.get(note.id);
+            if (!existing || new Date(note.timestamp) > new Date(existing.timestamp)) {
+                mergedMap.set(note.id, note);
+            }
+        });
+        
+        localStorage.setItem('journal_notes', JSON.stringify(Array.from(mergedMap.values())));
+        
+        const currentTitle = document.getElementById('selected-date-title').innerText;
+        if (currentTitle.includes("Notes for")) {
+            showNotesForDay(currentTitle.split("for ")[1]);
+        }
         renderAll();
     }
 
     /* -------------------------------------------------------------------------- */
-    /* 3. ADHD: FOCUS, STREAKS & TIME                                             */
+    /* 3. ADHD FEATURES: STREAKS & FOCUS                                          */
     /* -------------------------------------------------------------------------- */
     function updateStreakUI() {
         const streak = parseInt(localStorage.getItem('focus_streak') || '0');
@@ -493,7 +496,12 @@
             msg.innerText = "🌟 Dopamine Hit! 3 in a row!";
             msg.classList.remove('hidden');
             document.getElementById('focus-section').classList.add('celebrate');
-            setTimeout(() => { localStorage.setItem('focus_streak', '0'); msg.classList.add('hidden'); document.getElementById('focus-section').classList.remove('celebrate'); updateStreakUI(); }, 5000);
+            setTimeout(() => { 
+                localStorage.setItem('focus_streak', '0'); 
+                msg.classList.add('hidden'); 
+                document.getElementById('focus-section').classList.remove('celebrate'); 
+                updateStreakUI(); 
+            }, 5000);
         }
     }
 
@@ -535,7 +543,7 @@
     }
 
     /* -------------------------------------------------------------------------- */
-    /* 4. CORE JOURNAL & THEME                                                    */
+    /* 4. CORE JOURNAL LOGIC                                                      */
     /* -------------------------------------------------------------------------- */
     async function saveNote(manualText = null) {
         const text = manualText || noteInput.value.trim();
@@ -546,6 +554,28 @@
         if (!manualText) noteInput.value = '';
         updateLiveTimer();
         if (accessToken) await uploadToDrive();
+    }
+
+    function editNote(id) {
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        const idx = notes.findIndex(n => n.id === id);
+        if (idx === -1) return;
+        const newText = prompt("Update your note:", notes[idx].content);
+        if (newText !== null && newText.trim() !== "") {
+            notes[idx].content = newText;
+            notes[idx].timestamp = new Date().toISOString(); 
+            localStorage.setItem('journal_notes', JSON.stringify(notes));
+            showNotesForDay(notes[idx].dateKey);
+            if (accessToken) uploadToDrive();
+        }
+    }
+
+    function deleteNote(id) {
+        if(!confirm('Delete this permanently?')) return;
+        let notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.id !== id);
+        localStorage.setItem('journal_notes', JSON.stringify(notes));
+        renderAll();
+        if (accessToken) uploadToDrive();
     }
 
     function toggleDarkMode() {
@@ -567,32 +597,28 @@
         cal.innerHTML = '';
         document.getElementById('month-display').innerText = new Intl.DateTimeFormat('en-US', {month:'long', year:'numeric'}).format(currentMonth);
         const first = new Date(year, month, 1).getDay(), days = new Date(year, month + 1, 0).getDate();
-        const counts = JSON.parse(localStorage.getItem('journal_notes') || '[]').reduce((acc, n) => { acc[n.dateKey] = (acc[n.dateKey] || 0) + 1; return acc; }, {});
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        const counts = notes.reduce((acc, n) => { acc[n.dateKey] = (acc[n.dateKey] || 0) + 1; return acc; }, {});
 
         for(let i=0; i<first; i++) cal.appendChild(document.createElement('div'));
         for(let d=1; d<=days; d++) {
             const key = `${year}-${String(month+1).padStart(2, '0')}-${String(d).padStart(2, '0')}`, count = counts[key] || 0;
             const el = document.createElement('div');
             el.className = `calendar-day ${count > 0 ? 'lvl-' + Math.min(Math.ceil(count/2), 4) : ''}`;
+            el.title = count > 0 ? `${count} entries` : 'No entries';
             el.innerText = d; el.onclick = () => showNotesForDay(key);
             cal.appendChild(el);
         }
     }
 
     function showNotesForDay(dateKey) {
-        const list = document.getElementById('notes-list');
-        const title = document.getElementById('selected-date-title');
-        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        const list = document.getElementById('notes-list'), notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
         const filtered = notes.filter(n => n.dateKey === dateKey).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-        
-        title.innerText = `Notes for ${dateKey}`;
+        document.getElementById('selected-date-title').innerText = `Notes for ${dateKey}`;
         
         let html = '';
         filtered.forEach((n, i) => {
-            if (i > 0) {
-                const gap = formatDuration(new Date(n.timestamp) - new Date(filtered[i-1].timestamp));
-                html += `<div class="time-gap-container"><div class="duration-badge">⏱️ ${gap} gap</div></div>`;
-            }
+            if (i > 0) html += `<div class="time-gap-container"><div class="duration-badge">⏱️ ${formatDuration(new Date(n.timestamp) - new Date(filtered[i-1].timestamp))} gap</div></div>`;
             html += `
                 <div class="note-item">
                     <small>${new Date(n.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small>
@@ -609,7 +635,7 @@
     }
 
     /* -------------------------------------------------------------------------- */
-    /* 6. AI & UTILS                                                              */
+    /* 6. AI, SEARCH & UTILS                                                      */
     /* -------------------------------------------------------------------------- */
     async function generateDailySummary() {
         if (!engine) {
@@ -621,51 +647,64 @@
         document.getElementById('daily-summary-output').innerText = res.choices[0].message.content;
     }
 
+    function searchNotes() {
+        const query = document.getElementById('search-input').value.toLowerCase();
+        const list = document.getElementById('notes-list'), cal = document.getElementById('calendar'), title = document.getElementById('selected-date-title');
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]');
+        if (!query) { cal.style.display = 'grid'; list.innerHTML = ''; title.innerText = ''; return; }
+        cal.style.display = 'none'; title.innerText = `Search: "${query}"`;
+        const filtered = notes.filter(n => n.content.toLowerCase().includes(query)).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+        list.innerHTML = filtered.map(n => `<div class="note-item"><small>${n.dateKey}</small><div>${n.content.replace(new RegExp(query, 'gi'), m => `<mark>${m}</mark>`)}</div></div>`).join('');
+    }
+
+    function renderTagCloud() {
+        const cloud = document.getElementById('tag-cloud');
+        const tags = [...new Set(JSON.parse(localStorage.getItem('journal_notes') || '[]').flatMap(n => n.tags || []))];
+        cloud.innerHTML = tags.map(t => `<span class="tag" onclick="window.filterByTag('${t}')">${t}</span>`).join('');
+    }
+
+    function filterByTag(tag) {
+        const notes = JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.tags.includes(tag));
+        document.getElementById('calendar').style.display = 'none';
+        document.getElementById('selected-date-title').innerText = `Tag: #${tag}`;
+        document.getElementById('notes-list').innerHTML = notes.map(n => `<div class="note-item"><small>${n.dateKey}</small><div>${n.content}</div></div>`).join('');
+    }
+
     function showPage(pageId) {
         document.getElementById('home-page').classList.toggle('hidden', pageId !== 'home-page');
         document.getElementById('history-page').classList.toggle('hidden', pageId !== 'history-page');
         document.getElementById('nav-write').classList.toggle('active', pageId === 'home-page');
         document.getElementById('nav-history').classList.toggle('active', pageId === 'history-page');
-        if (pageId === 'history-page') { renderAll(); document.getElementById('notes-list').innerHTML = ''; }
+        if (pageId === 'history-page') { renderAll(); document.getElementById('notes-list').innerHTML = ''; document.getElementById('selected-date-title').innerText = ''; document.getElementById('calendar').style.display = 'grid'; }
     }
 
     function renderAll() { renderTagCloud(); renderCalendar(); }
-    function renderTagCloud() { /* existing logic */ }
     function changeMonth(dir) { currentMonth.setMonth(currentMonth.getMonth() + dir); renderCalendar(); }
-    function deleteNote(id) { if(confirm('Delete?')) { localStorage.setItem('journal_notes', JSON.stringify(JSON.parse(localStorage.getItem('journal_notes') || '[]').filter(n => n.id !== id))); renderAll(); if(accessToken) uploadToDrive(); } }
+    function exportNotes() { const b = new Blob([localStorage.getItem('journal_notes')], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'journal.json'; a.click(); }
+    function importNotes(e) { const r = new FileReader(); r.onload = (ev) => { localStorage.setItem('journal_notes', ev.target.result); renderAll(); alert('Imported!'); }; r.readAsText(e.target.files[0]); }
 
-    Object.assign(window, { showPage, toggleDarkMode, saveNote, deleteNote, generateDailySummary, changeMonth, handleAuthClick, startFocus, completeFocus });
-    window.addEventListener('load', () => {
-        initGIS();
+    Object.assign(window, { 
+        showPage, toggleDarkMode, saveNote, deleteNote, editNote, exportNotes, importNotes,
+        changeMonth, handleAuthClick, startFocus, completeFocus, filterByTag, searchNotes, generateDailySummary
     });
-    (function init() {
-        renderFocus();
-        updateLiveTimer();
-        updateStreakUI();
-        setInterval(updateLiveTimer, 30000);
 
+    window.addEventListener('load', () => initGIS());
+
+    (function init() {
+        renderFocus(); updateLiveTimer(); updateStreakUI(); setInterval(updateLiveTimer, 30000);
         const isDark = localStorage.getItem('dark_mode') !== 'false';
         document.body.classList.toggle('dark-mode', isDark);
         document.getElementById('theme-icon').innerText = isDark ? '🌙' : '☀️';
 
-        /* 🔧 FIX 2: Service Worker path for GitHub Pages */
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker
-                .register('/InterstitialJournal/sw.js')
-                .then(reg => {
-                    reg.onupdatefound = () => {
-                        const install = reg.installing;
-                        install.onstatechange = () => {
-                            if (install.state === 'installed' && navigator.serviceWorker.controller) {
-                                window.location.reload();
-                            }
-                        };
-                    };
-                })
-                .catch(err => console.error("SW registration failed:", err));
+            navigator.serviceWorker.register('/InterstitialJournal/sw.js').then(reg => {
+                reg.onupdatefound = () => {
+                    const install = reg.installing;
+                    install.onstatechange = () => { if (install.state === 'installed' && navigator.serviceWorker.controller) window.location.reload(); };
+                };
+            }).catch(err => console.error("SW registration failed:", err));
         }
     })();
-
 </script>
 </body>
 </html>
