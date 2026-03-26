@@ -24,7 +24,7 @@
  *    the current one.
  * ============================================================ */
 
-const CACHE_VERSION = 'journal-v17';
+const CACHE_VERSION = 'journal-v18';
 
 const SHELL_ASSETS = [
     './',
