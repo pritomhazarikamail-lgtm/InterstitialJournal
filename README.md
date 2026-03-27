@@ -198,3 +198,4 @@ InterstitialJournal/
 
 - [WebLLM](https://github.com/mlc-ai/web-llm) by MLC AI — on-device LLM inference in the browser
 - [Instrument Serif](https://fonts.google.com/specimen/Instrument+Serif) + [DM Sans](https://fonts.google.com/specimen/DM+Sans) — Google Fonts
+- [Interstitial journaling](https://nesslabs.com/interstitial-journaling) - Tony Stubblebine 
