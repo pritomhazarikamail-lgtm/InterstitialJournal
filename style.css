@@ -1156,13 +1156,220 @@ button.primary-btn:active { transform: scale(0.98) translateY(0); }
 /* Loading spinner (used in AI summarize button) */
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.spinner {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    border: 2px solid rgba(255,255,255,0.4);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-    vertical-align: middle;
+/* ─────────────────────────────────────────────────────────
+ * 19. Pinned Entries
+ * ───────────────────────────────────────────────────────── */
+
+.note-item--pinned {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-sm);
+}
+
+.note-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+
+.pinned-badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid rgba(61,107,255,0.2);
+    border-radius: 20px;
+    padding: 2px 8px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.pin-link          { color: var(--muted); }
+.pin-link:hover    { background: var(--surface2); color: var(--accent); }
+
+/* Pinned section label and divider inside the timeline */
+.pinned-section-header {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px 10px;
+}
+
+.pinned-section-divider {
+    margin: 16px 0 16px 10px;
+    border-top: 1.5px dashed var(--border);
+    position: relative;
+}
+
+.pinned-section-divider::after {
+    content: 'Timeline';
+    position: absolute;
+    top: -9px;
+    left: 0;
+    background: var(--bg);
+    padding: 0 8px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+
+/* ─────────────────────────────────────────────────────────
+ * 20. Export Dropdown
+ * ───────────────────────────────────────────────────────── */
+
+.export-menu {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    background: var(--card-bg);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 500;
+    overflow: hidden;
+    animation: slideUp 0.15s ease-out both;
+}
+
+.export-menu-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 11px 16px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    font-size: 0.88rem;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s;
+}
+.export-menu-item:last-child   { border-bottom: none; }
+.export-menu-item:hover        { background: var(--accent-soft); color: var(--accent); }
+.export-menu-item span         { font-size: 0.72rem; font-weight: 400; color: var(--muted); }
+.export-menu-item:hover span   { color: var(--accent); }
+
+
+/* ─────────────────────────────────────────────────────────
+ * 21. Date Range Filter
+ * ───────────────────────────────────────────────────────── */
+
+.date-range-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.date-range-row input[type="date"] {
+    flex: 1;
+    padding: 9px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--card-bg);
+    color: var(--text);
+    font-size: 0.85rem;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    color-scheme: light dark;  /* ensures native date picker matches theme */
+}
+.date-range-row input[type="date"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.date-range-sep {
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.date-range-clear-btn {
+    background: none;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    font-size: 0.8rem;
+    padding: 8px 10px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    flex-shrink: 0;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.date-range-clear-btn:hover {
+    background: rgba(214,59,47,0.08);
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+
+/* ─────────────────────────────────────────────────────────
+ * 22. Print / PDF  (@media print)
+ *
+ * Hides all chrome — renders only the notes list cleanly.
+ * ───────────────────────────────────────────────────────── */
+
+@media print {
+    body {
+        background: white !important;
+        color: black !important;
+        padding-bottom: 0 !important;
+    }
+
+    /* Hide everything except the notes list */
+    .bottom-nav,
+    #install-banner,
+    #toast,
+    #modal-overlay,
+    #home-page,
+    #tag-cloud-wrap,
+    .search-wrapper,
+    .date-range-row,
+    #llm-controls,
+    #calendar,
+    .storage-footer,
+    .note-actions,
+    .time-gap-container { display: none !important; }
+
+    #history-page { display: block !important; }
+
+    .container {
+        max-width: 100% !important;
+        padding: 0 16px !important;
+    }
+
+    .note-item {
+        break-inside: avoid;
+        border: 1px solid #ccc !important;
+        box-shadow: none !important;
+        margin-bottom: 12px !important;
+        margin-left: 0 !important;
+    }
+
+    .note-item--pinned { border-color: #3d6bff !important; }
+
+    #notes-list {
+        border-left: none !important;
+        padding-left: 0 !important;
+        margin-left: 0 !important;
+    }
+
+    #selected-date-title {
+        font-size: 1rem !important;
+        font-weight: 700 !important;
+        color: black !important;
+    }
 }

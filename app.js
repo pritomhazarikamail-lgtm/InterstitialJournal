@@ -19,6 +19,11 @@
  *  15.  Navigation & Utilities
  *  16.  Event Wiring
  *  17.  Init
+ *
+ * Features added:
+ *  - Pinned entries  (§11 pinNote, §12 renderNoteCard sort)
+ *  - Export options  (§15 exportJSON/exportMarkdown/exportPrint, dropdown)
+ *  - Date range filter (§14 filterByDateRange, §5 state, §12 renderAll)
  */
 
 'use strict';
@@ -50,6 +55,7 @@ function validateNote(note) {
         timestamp: note.timestamp,
         content:   note.content.slice(0, 5000),
         dateKey:   note.dateKey,
+        pinned:    note.pinned === true,   // boolean; false by default for old notes
         tags: Array.isArray(note.tags)
             ? note.tags.filter(t => typeof t === 'string' && /^#\w+$/.test(t)).slice(0, 20)
             : [],
@@ -180,6 +186,8 @@ let isSyncing    = false;   // Mutex: prevents concurrent overlapping syncs
 
 let currentMonth = new Date();
 let _activeTag   = null;    // currently selected tag filter, null = all
+let _dateFrom    = null;    // date range filter start (YYYY-MM-DD string or null)
+let _dateTo      = null;    // date range filter end   (YYYY-MM-DD string or null)
 
 const noteInput   = document.getElementById('note-input');
 const charCounter = document.getElementById('char-counter');
@@ -928,6 +936,19 @@ async function deleteNote(id) {
     showToast('Note deleted');
 }
 
+async function pinNote(id) {
+    const safeId = sanitiseId(id);
+    if (!safeId) return;
+    const notes = getLocalNotes();
+    const idx   = notes.findIndex(n => n.id === safeId);
+    if (idx === -1) return;
+    notes[idx].pinned = !notes[idx].pinned;
+    setLocalNotes(notes);
+    showNotesForDay(notes[idx].dateKey);
+    if (accessToken) await uploadToDrive();
+    showToast(notes[idx].pinned ? '📌 Pinned' : 'Unpinned');
+}
+
 function toggleDarkMode() {
     const isDark = document.body.classList.toggle('dark-mode');
     localStorage.setItem('dark_mode', String(isDark));
@@ -976,65 +997,121 @@ function renderCalendar() {
     }
 }
 
+/* ── Shared note card builder ───────────────────────────────────────────────
+ * Used by showNotesForDay and filterByDateRange so rendering is consistent.
+ * ─────────────────────────────────────────────────────────────────────────── */
+function buildNoteCard(n, showDate = false) {
+    const card = document.createElement('div');
+    card.className = `note-item${n.pinned ? ' note-item--pinned' : ''}`;
+
+    // Header row: timestamp + optional date + pinned badge
+    const header = document.createElement('div');
+    header.className = 'note-card-header';
+
+    const time = document.createElement('small');
+    time.textContent = new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (showDate) time.textContent = `${n.dateKey}  ${time.textContent}`;
+    header.appendChild(time);
+
+    if (n.pinned) {
+        const badge = document.createElement('span');
+        badge.className   = 'pinned-badge';
+        badge.textContent = '📌 Pinned';
+        header.appendChild(badge);
+    }
+
+    card.appendChild(header);
+
+    // Content — plain text, newlines preserved
+    const contentDiv = document.createElement('div');
+    contentDiv.style.cssText = 'margin:10px 0;font-size:1.05rem;';
+    n.content.split('\n').forEach((line, li) => {
+        if (li > 0) contentDiv.appendChild(document.createElement('br'));
+        contentDiv.appendChild(document.createTextNode(line));
+    });
+    card.appendChild(contentDiv);
+
+    // Actions row
+    const actions = document.createElement('div');
+    actions.className = 'note-actions';
+
+    const pinBtn = document.createElement('button');
+    pinBtn.className   = 'action-link pin-link';
+    pinBtn.textContent = n.pinned ? 'Unpin' : 'Pin';
+    pinBtn.addEventListener('click', () => pinNote(n.id));
+
+    const editBtn = document.createElement('button');
+    editBtn.className   = 'action-link edit-link';
+    editBtn.textContent = 'Edit';
+    editBtn.addEventListener('click', () => editNote(n.id));
+
+    const delBtn = document.createElement('button');
+    delBtn.className   = 'action-link delete-link';
+    delBtn.textContent = 'Delete';
+    delBtn.addEventListener('click', () => deleteNote(n.id));
+
+    actions.append(pinBtn, editBtn, delBtn);
+    card.appendChild(actions);
+
+    return card;
+}
+
 function showNotesForDay(dateKey) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;  // SECURITY: validate format
 
     _activeTag = null;
     _clearTagActive();
+    _clearDateRange();
 
     const list     = document.getElementById('notes-list');
-    const notes    = getLocalNotes();
-    const filtered = notes
+    const allNotes = getLocalNotes();
+
+    // Always sort purely chronologically — pinning never reorders
+    const dayNotes = allNotes
         .filter(n => n.dateKey === dateKey)
         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
     document.getElementById('selected-date-title').textContent = `Notes for ${dateKey}`;
     list.innerHTML = '';
 
-    if (filtered.length === 0) {
+    if (dayNotes.length === 0) {
         const p = document.createElement('p'); p.textContent = 'No entries.'; list.appendChild(p);
     } else {
-        filtered.forEach((n, i) => {
+        const pinned   = dayNotes.filter(n => n.pinned);
+        const unpinned = dayNotes.filter(n => !n.pinned);
+
+        // ── Pinned section (no gap badges — these are floating references) ──
+        if (pinned.length > 0) {
+            const pinnedHeader = document.createElement('div');
+            pinnedHeader.className   = 'pinned-section-header';
+            pinnedHeader.textContent = '📌 Pinned';
+            list.appendChild(pinnedHeader);
+
+            pinned.forEach(n => list.appendChild(buildNoteCard(n)));
+
+            // Divider between pinned and timeline
+            const divider = document.createElement('div');
+            divider.className = 'pinned-section-divider';
+            list.appendChild(divider);
+        }
+
+        // ── Chronological timeline — gap badges reflect real wall-clock time ──
+        // All notes (including pinned) feed the gap calculation so the times
+        // shown accurately represent actual elapsed time between entries.
+        dayNotes.forEach((n, i) => {
             if (i > 0) {
                 const gap   = document.createElement('div'); gap.className = 'time-gap-container';
                 const badge = document.createElement('div'); badge.className = 'duration-badge';
-                badge.textContent = `⏱️ ${formatDuration(new Date(n.timestamp) - new Date(filtered[i-1].timestamp))} gap`;
+                badge.textContent = `⏱️ ${formatDuration(new Date(n.timestamp) - new Date(dayNotes[i-1].timestamp))} gap`;
                 gap.appendChild(badge);
                 list.appendChild(gap);
             }
-
-            const card = document.createElement('div'); card.className = 'note-item';
-
-            const time = document.createElement('small');
-            time.textContent = new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-            // SECURITY: text nodes only — no innerHTML for user content
-            const contentDiv = document.createElement('div');
-            contentDiv.style.cssText = 'margin:10px 0;font-size:1.05rem;';
-            n.content.split('\n').forEach((line, li) => {
-                if (li > 0) contentDiv.appendChild(document.createElement('br'));
-                contentDiv.appendChild(document.createTextNode(line));
-            });
-
-            const actions = document.createElement('div'); actions.className = 'note-actions';
-
-            const editBtn = document.createElement('button');
-            editBtn.className = 'action-link edit-link'; editBtn.textContent = 'Edit';
-            editBtn.addEventListener('click', () => editNote(n.id));
-
-            const delBtn = document.createElement('button');
-            delBtn.className = 'action-link delete-link'; delBtn.textContent = 'Delete';
-            delBtn.addEventListener('click', () => deleteNote(n.id));
-
-            actions.append(editBtn, delBtn);
-            card.append(time, contentDiv, actions);
-            list.appendChild(card);
+            list.appendChild(buildNoteCard(n));
         });
     }
 
-    document.getElementById('llm-controls').style.display = filtered.length > 0 ? 'block' : 'none';
+    document.getElementById('llm-controls').style.display = dayNotes.length > 0 ? 'block' : 'none';
 
-    // Avoid unnecessary full DOM rebuild when viewing a different month
     const [y, m] = dateKey.split('-').map(Number);
     if (currentMonth.getFullYear() === y && currentMonth.getMonth() === m - 1) renderCalendar();
 }
@@ -1256,34 +1333,92 @@ function searchNotes() {
     cal.style.display  = 'none';
     title.textContent  = `Search: "${rawQuery.slice(0, 50)}"`;
 
-    const filtered = getLocalNotes()
+    const allNotes = getLocalNotes();
+    const filtered = allNotes
         .filter(n => n.content.toLowerCase().includes(query))
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
     list.innerHTML = '';
     filtered.forEach(n => {
-        const card = document.createElement('div'); card.className = 'note-item';
-        const dateEl = document.createElement('small'); dateEl.textContent = n.dateKey;
-
-        // SECURITY: Highlight via DOM manipulation — never string replace + innerHTML
-        const contentDiv = document.createElement('div');
-        const lower = n.content.toLowerCase();
-        let last = 0, pos;
-        while ((pos = lower.indexOf(query, last)) !== -1) {
-            if (pos > last) contentDiv.appendChild(document.createTextNode(n.content.slice(last, pos)));
-            const mark = document.createElement('mark'); mark.textContent = n.content.slice(pos, pos + query.length);
-            contentDiv.appendChild(mark);
-            last = pos + query.length;
+        // Build standard card with date shown
+        const card = buildNoteCard(n, true);
+        // Replace content div with highlighted version
+        const divs = card.querySelectorAll('div');
+        // The content div is the one with inline cssText (margin:10px 0...)
+        const contentDiv = Array.from(divs).find(d => d.style.margin);
+        if (contentDiv) {
+            const newDiv = document.createElement('div');
+            newDiv.style.cssText = 'margin:10px 0;font-size:1.05rem;';
+            const lower = n.content.toLowerCase();
+            let last = 0, pos;
+            // SECURITY: DOM highlight — never innerHTML
+            while ((pos = lower.indexOf(query, last)) !== -1) {
+                if (pos > last) newDiv.appendChild(document.createTextNode(n.content.slice(last, pos)));
+                const mark = document.createElement('mark');
+                mark.textContent = n.content.slice(pos, pos + query.length);
+                newDiv.appendChild(mark);
+                last = pos + query.length;
+            }
+            if (last < n.content.length) newDiv.appendChild(document.createTextNode(n.content.slice(last)));
+            contentDiv.replaceWith(newDiv);
         }
-        if (last < n.content.length) contentDiv.appendChild(document.createTextNode(n.content.slice(last)));
-
-        card.append(dateEl, contentDiv);
         list.appendChild(card);
     });
 
     if (filtered.length === 0) {
         const p = document.createElement('p'); p.textContent = 'No notes match your search.'; list.appendChild(p);
     }
+}
+
+/* ── Date Range Filter ──────────────────────────────────────────────────────
+ * _dateFrom / _dateTo are YYYY-MM-DD strings or null.
+ * Renders a flat chronological list of all notes in the range.
+ * ─────────────────────────────────────────────────────────────────────────── */
+function filterByDateRange() {
+    const fromInput = document.getElementById('date-from');
+    const toInput   = document.getElementById('date-to');
+    _dateFrom = fromInput.value || null;
+    _dateTo   = toInput.value   || null;
+
+    if (!_dateFrom && !_dateTo) { _restoreCalendarState(); return; }
+
+    // Clear tag filter when date range is applied
+    _activeTag = null;
+    _clearTagActive();
+
+    const from = _dateFrom ? new Date(_dateFrom) : new Date(0);
+    const to   = _dateTo   ? new Date(_dateTo + 'T23:59:59') : new Date(8640000000000000);
+
+    const allNotes = getLocalNotes();
+    const filtered = allNotes
+        .filter(n => { const d = new Date(n.timestamp); return d >= from && d <= to; })
+        .sort((a, b) => {
+            if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+            return new Date(a.timestamp) - new Date(b.timestamp);
+        });
+
+    const label = [_dateFrom, _dateTo].filter(Boolean).join(' → ');
+    document.getElementById('selected-date-title').textContent = `Range: ${label}`;
+    document.getElementById('calendar').style.display = 'grid';
+    document.getElementById('llm-controls').style.display = 'none';
+
+    const list = document.getElementById('notes-list');
+    list.innerHTML = '';
+
+    if (filtered.length === 0) {
+        const p = document.createElement('p'); p.textContent = 'No entries in this range.'; list.appendChild(p);
+        return;
+    }
+    filtered.forEach(n => list.appendChild(buildNoteCard(n, true)));
+}
+
+function _clearDateRange() {
+    _dateFrom = null;
+    _dateTo   = null;
+    const fromInput = document.getElementById('date-from');
+    const toInput   = document.getElementById('date-to');
+    if (fromInput) fromInput.value = '';
+    if (toInput)   toInput.value   = '';
 }
 
 function renderTagCloud() {
@@ -1377,6 +1512,8 @@ function filterByTag(tag) {
 
     _activeTag = tag;
     _clearTagActive();
+    // Clear date range when tag filter is applied
+    _clearDateRange();
     document.querySelectorAll('#tag-cloud .tag, #tag-overflow-list .tag').forEach(btn => {
         if (btn.textContent.trim() === tag) btn.classList.add('tag--active');
     });
@@ -1430,6 +1567,7 @@ function showPage(pageId) {
     if (pageId === 'history-page') {
         _activeTag = null;
         _clearTagActive();
+        _clearDateRange();
         renderAll();
         document.getElementById('notes-list').innerHTML = '';
         document.getElementById('llm-controls').style.display = 'none';
@@ -1442,7 +1580,28 @@ function showPage(pageId) {
 function renderAll() { renderTagCloud(); renderCalendar(); }
 function changeMonth(dir) { currentMonth.setMonth(currentMonth.getMonth() + dir); renderCalendar(); }
 
-function exportNotes() {
+/* ── Export ─────────────────────────────────────────────────────────────────
+ * Three formats: JSON (machine-readable), Markdown (human-readable),
+ * and Print/PDF (browser print dialog with @media print stylesheet).
+ * ─────────────────────────────────────────────────────────────────────────── */
+function toggleExportMenu() {
+    const menu = document.getElementById('export-menu');
+    menu.classList.toggle('hidden');
+    // Close on next outside click
+    if (!menu.classList.contains('hidden')) {
+        setTimeout(() => {
+            document.addEventListener('click', function closeMenu(e) {
+                if (!document.getElementById('export-menu-wrap')?.contains(e.target)) {
+                    menu.classList.add('hidden');
+                    document.removeEventListener('click', closeMenu);
+                }
+            });
+        }, 0);
+    }
+}
+
+function exportJSON() {
+    document.getElementById('export-menu').classList.add('hidden');
     const blob = new Blob([JSON.stringify(getLocalNotes(), null, 2)], { type: 'application/json' });
     const a    = Object.assign(document.createElement('a'), {
         href:     URL.createObjectURL(blob),
@@ -1450,6 +1609,45 @@ function exportNotes() {
     });
     a.click();
     URL.revokeObjectURL(a.href);
+}
+
+function exportMarkdown() {
+    document.getElementById('export-menu').classList.add('hidden');
+    const notes = getLocalNotes()
+        .slice()
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // Group by date
+    const byDate = {};
+    notes.forEach(n => {
+        if (!byDate[n.dateKey]) byDate[n.dateKey] = [];
+        byDate[n.dateKey].push(n);
+    });
+
+    const lines = ['# Interstitial Journal\n'];
+    Object.keys(byDate).sort().forEach(date => {
+        lines.push(`## ${date}\n`);
+        byDate[date].forEach(n => {
+            const time = new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const pin  = n.pinned ? ' 📌' : '';
+            lines.push(`**${time}**${pin}  `);
+            lines.push(n.content);
+            lines.push('');
+        });
+    });
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+    const a    = Object.assign(document.createElement('a'), {
+        href:     URL.createObjectURL(blob),
+        download: `journal-${getISODate(new Date())}.md`,
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+function exportPrint() {
+    document.getElementById('export-menu').classList.add('hidden');
+    window.print();
 }
 
 function importNotes(e) {
@@ -1489,8 +1687,22 @@ document.getElementById('nav-sync').addEventListener('click', handleAuthClick);
 document.getElementById('nav-theme').addEventListener('click', toggleDarkMode);
 document.getElementById('prev-month-btn').addEventListener('click', () => changeMonth(-1));
 document.getElementById('next-month-btn').addEventListener('click', () => changeMonth(1));
-document.getElementById('export-btn').addEventListener('click', exportNotes);
+
+// Export dropdown
+document.getElementById('export-btn').addEventListener('click', toggleExportMenu);
+document.getElementById('export-json-btn').addEventListener('click', exportJSON);
+document.getElementById('export-md-btn').addEventListener('click', exportMarkdown);
+document.getElementById('export-print-btn').addEventListener('click', exportPrint);
+
 document.getElementById('import-file').addEventListener('change', importNotes);
+
+// Date range filter
+document.getElementById('date-from').addEventListener('change', filterByDateRange);
+document.getElementById('date-to').addEventListener('change', filterByDateRange);
+document.getElementById('date-range-clear').addEventListener('click', () => {
+    _clearDateRange();
+    _restoreCalendarState();
+});
 
 document.getElementById('tag-more-btn').addEventListener('click', e => {
     e.stopPropagation();

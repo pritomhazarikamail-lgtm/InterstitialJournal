@@ -253,6 +253,14 @@
                    placeholder="Search your thoughts..." aria-label="Search notes">
         </div>
 
+        <!-- Date range filter -->
+        <div class="date-range-row">
+            <input type="date" id="date-from" aria-label="From date">
+            <span class="date-range-sep">→</span>
+            <input type="date" id="date-to" aria-label="To date">
+            <button id="date-range-clear" class="date-range-clear-btn" aria-label="Clear date filter">✕</button>
+        </div>
+
         <!-- Calendar heatmap -->
         <div id="calendar" class="calendar-grid"></div>
 
@@ -299,8 +307,15 @@
 
         <!-- Export / Import -->
         <div class="storage-footer" style="display:flex;gap:10px;margin-top:40px;padding-bottom:60px;">
-            <button id="export-btn" class="footer-btn">📤 Export</button>
-            <label class="footer-btn" style="cursor:pointer;">
+            <div id="export-menu-wrap" style="position:relative;flex:1;">
+                <button id="export-btn" class="footer-btn" style="width:100%;">📤 Export ▾</button>
+                <div id="export-menu" class="export-menu hidden">
+                    <button id="export-json-btn"  class="export-menu-item">📄 JSON <span>machine-readable</span></button>
+                    <button id="export-md-btn"    class="export-menu-item">📝 Markdown <span>human-readable</span></button>
+                    <button id="export-print-btn" class="export-menu-item">🖨️ Print / PDF <span>browser dialog</span></button>
+                </div>
+            </div>
+            <label class="footer-btn" style="cursor:pointer;flex:1;">
                 📥 Import
                 <input type="file" id="import-file" accept=".json"
                        style="display:none;" aria-label="Import journal file">
