@@ -11,8 +11,9 @@
  * app.js listens for all these events and routes them appropriately.
  */
 
-import { getDateIndex, getTagIndex } from './storage.js';
+import { getDateIndex, getTagIndex, getISODate, safeJSON } from './storage.js';
 import { uiState } from './state.js';
+import { isModelReady, generateNarrativeSummary } from './ai.js';
 
 export function formatDuration(ms) {
     const m = Math.floor(ms / 60000);
@@ -77,6 +78,7 @@ export function buildNoteCard(n, showDate = false) {
         : '';
     card.className = `note-item${n.pinned ? ' note-item--pinned' : ''}${noteType ? ' ' + noteType : ''}`;
     card.setAttribute('tabindex', '-1');
+    card.setAttribute('data-note-id', String(n.id));
 
     // ── Swipe-left to delete (event handled in app.js → swipeDeleteNote) ──
     let _touchStartX = null;
@@ -117,6 +119,17 @@ export function buildNoteCard(n, showDate = false) {
         badge.textContent = '📌 Pinned';
         header.appendChild(badge);
     }
+
+    // Mood dot (populated by AI mood classification, stored in localStorage)
+    const moodScores = safeJSON(localStorage.getItem('ai_mood_scores'), {});
+    const mood       = moodScores[n.id];
+    if (mood) {
+        const dot = document.createElement('span');
+        dot.className = `mood-dot mood-dot--${mood}`;
+        dot.title     = mood;
+        header.appendChild(dot);
+    }
+
     card.appendChild(header);
 
     const contentDiv = document.createElement('div');
@@ -178,7 +191,16 @@ export function buildNoteCard(n, showDate = false) {
     delBtn.textContent = 'Delete';
     delBtn.addEventListener('click', () => fire('note-delete'));
 
-    actions.append(pinBtn, editBtn, delBtn);
+    // ✨ Clean up button — only shown when AI is warm, user-initiated
+    const cleanupBtn = document.createElement('button');
+    cleanupBtn.className = 'action-link cleanup-link';
+    cleanupBtn.textContent = '✨';
+    cleanupBtn.title = isModelReady() ? 'Clean up note with AI' : 'AI not ready (open a day and click Summarize first)';
+    cleanupBtn.addEventListener('click', () => {
+        document.dispatchEvent(new CustomEvent('note-cleanup', { detail: { id: n.id, btn: cleanupBtn } }));
+    });
+
+    actions.append(pinBtn, editBtn, delBtn, cleanupBtn);
     card.appendChild(actions);
 
     return card;
@@ -216,6 +238,38 @@ function renderDayDigest(dayNotes) {
     el.style.display = 'block';
 }
 
+/* ── Day narrative (AI) ────────────────────────────────────────────────────── */
+
+function _renderDayNarrative(dayNotes, dateKey) {
+    const el = document.getElementById('day-narrative');
+    if (!el) return;
+
+    el.style.display = 'none';
+    el.textContent   = '';
+
+    // Always show cached narrative (for any day)
+    const cached = localStorage.getItem(`ai_narrative_${dateKey}`);
+    if (cached) {
+        el.textContent   = cached;
+        el.style.display = 'block';
+        return;
+    }
+
+    // Auto-generate only for today, after noon, with 3+ notes, when AI is warm
+    const todayKey = getISODate(new Date());
+    const hour     = new Date().getHours();
+    if (dateKey !== todayKey || dayNotes.length < 3 || hour < 12 || !isModelReady()) return;
+
+    const run = () => {
+        generateNarrativeSummary(dayNotes, dateKey).then(text => {
+            if (!text) return;
+            el.textContent   = text;
+            el.style.display = 'block';
+        });
+    };
+    typeof requestIdleCallback === 'function' ? requestIdleCallback(run) : setTimeout(run, 0);
+}
+
 /* ── Day timeline ──────────────────────────────────────────────────────────── */
 
 export function showNotesForDay(dateKey) {
@@ -232,6 +286,7 @@ export function showNotesForDay(dateKey) {
 
     document.getElementById('selected-date-title').textContent = `Notes for ${dateKey}`;
     renderDayDigest(dayNotes);
+    _renderDayNarrative(dayNotes, dateKey);
     list.innerHTML = '';
 
     if (dayNotes.length === 0) {

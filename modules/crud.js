@@ -41,6 +41,11 @@ export async function saveNote(manualText = null) {
     // Always clear draft (covers both manual and programmatic saves like completeTodo)
     document.dispatchEvent(new CustomEvent('hide-slash-dropdown'));
 
+    // Signal orchestrator for mood classification (fire-and-forget, no cost if AI not warm)
+    document.dispatchEvent(new CustomEvent('note-saved', {
+        detail: { id: newNote.id, content: newNote.content },
+    }));
+
     if (!manualText) {
         const nextUpInput = document.getElementById('next-up-input');
         const charCounter = document.getElementById('char-counter');
@@ -80,6 +85,25 @@ export async function editNote(id) {
     notes[idx].content   = newText.trim();
     notes[idx].timestamp = new Date().toISOString();
     notes[idx].tags      = (newText.match(/#(\w+)/g) || []).map(t => t.toLowerCase());
+    setLocalNotes(notes);
+    showNotesForDay(notes[idx].dateKey);
+    markDirty();
+}
+
+/**
+ * Silent edit — applies new content without a modal.
+ * Used by the AI note cleanup feature in app.js.
+ */
+export async function applyNoteEdit(id, newContent) {
+    const safeId = sanitiseId(id);
+    if (!safeId || typeof newContent !== 'string' || !newContent.trim()) return;
+    if (newContent.length > 5000) return;
+    const notes = getLocalNotes();
+    const idx   = notes.findIndex(n => n.id === safeId);
+    if (idx === -1) return;
+    notes[idx].content   = newContent.trim();
+    notes[idx].timestamp = new Date().toISOString();
+    notes[idx].tags      = (newContent.match(/#(\w+)/g) || []).map(t => t.toLowerCase());
     setLocalNotes(notes);
     showNotesForDay(notes[idx].dateKey);
     markDirty();

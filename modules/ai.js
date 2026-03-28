@@ -1,22 +1,32 @@
 /**
- * modules/ai.js — On-device AI summary via @mlc-ai/web-llm
+ * modules/ai.js — On-device AI via @mlc-ai/web-llm
  *
- * web-llm handles model download, caching (IndexedDB), and chat internally.
- * No manual WASM/ONNX wrangling needed — works on any WebGPU device.
+ * Two tracks:
+ *  FOREGROUND — explicit "Summarize" button; shows download/progress UI.
+ *  BACKGROUND — automatic features; silent, cached, requestIdleCallback-gated.
+ *
+ * Performance contract:
+ *  • preloadModel() only runs if the user has previously loaded the model
+ *    (ai_model_used flag), and only inside requestIdleCallback so it never
+ *    competes with user interaction.
+ *  • All background task functions return null immediately if the model is
+ *    not already warm — they never trigger a download.
+ *  • Results are cached in localStorage so the same prompt never runs twice
+ *    for the same content (per-day / per-week keys).
  */
 
-import { getDateIndex } from './storage.js';
+import { getISODate } from './storage.js';
 
-// Map<modelId, MLCEngine> — keeps every loaded engine alive for the session.
-// Switching models and switching back never re-initialises the engine.
-// WebLLM persists the model weights in IndexedDB, so they are never
-// re-downloaded after the first load.
+// Map<modelId, MLCEngine> — engines stay alive for the session
 const _engines = new Map();
+let _modelReady = false;
 
 function yieldToMain() {
     if (typeof scheduler !== 'undefined' && scheduler.yield) return scheduler.yield();
     return new Promise(r => setTimeout(r, 0));
 }
+
+/* ── Progress UI (foreground only) ──────────────────────────────────────────── */
 
 function setDlProgress(text, pct) {
     const wrap  = document.getElementById('dl-progress-wrap');
@@ -33,6 +43,46 @@ function hideDlProgress() {
     document.getElementById('dl-progress-wrap').style.display = 'none';
 }
 
+/* ── Helpers ──────────────────────────────────────────────────────────────── */
+
+function _getModelId() {
+    return document.getElementById('model-select')?.value || 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+}
+
+/** Returns the ISO date of the current Monday (used as a per-week cache key). */
+function _mondayKey() {
+    const d   = new Date();
+    const day = d.getDay() || 7;
+    const mon = new Date(d);
+    mon.setDate(d.getDate() - day + 1);
+    return getISODate(mon);
+}
+
+/* ── Model-ready signal ─────────────────────────────────────────────────────── */
+
+function _onModelReady() {
+    _modelReady = true;
+    localStorage.setItem('ai_model_used', 'true');
+
+    // Brief "⚡ AI" badge — fades out after 4 s so it doesn't clutter the UI
+    const badge = document.getElementById('ai-ready-badge');
+    if (badge) {
+        badge.style.display  = 'inline-block';
+        badge.style.opacity  = '1';
+        badge.style.transition = 'opacity 0.4s ease';
+        setTimeout(() => { badge.style.opacity = '0'; },    4000);
+        setTimeout(() => { badge.style.display = 'none'; }, 4500);
+    }
+
+    // Notify any modules waiting for AI to become available
+    document.dispatchEvent(new CustomEvent('ai-ready'));
+}
+
+export function isModelReady() { return _modelReady; }
+
+/* ── Engine loaders ────────────────────────────────────────────────────────── */
+
+/** Foreground load — shows the download progress bar. */
 async function loadEngine(modelId) {
     if (_engines.has(modelId)) return _engines.get(modelId);
     const webllm = await import('https://esm.run/@mlc-ai/web-llm');
@@ -46,6 +96,171 @@ async function loadEngine(modelId) {
     _engines.set(modelId, engine);
     return engine;
 }
+
+/** Silent background load — no UI, no throw, returns null on failure. */
+async function _silentLoadEngine(modelId) {
+    if (_engines.has(modelId)) return _engines.get(modelId);
+    try {
+        const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+        if (!navigator.gpu) return null;
+        const engine = await webllm.CreateMLCEngine(modelId, {
+            initProgressCallback: () => {},
+        });
+        _engines.set(modelId, engine);
+        return engine;
+    } catch { return null; }
+}
+
+/* ── Background preloader ───────────────────────────────────────────────────── */
+/**
+ * Called from app.js init. Only acts if the user has previously loaded the
+ * model (ai_model_used flag), and runs inside requestIdleCallback so it
+ * never competes with page interaction.
+ */
+export function preloadModel() {
+    if (_modelReady) return;
+    if (localStorage.getItem('ai_model_used') !== 'true') return;
+
+    const run = async () => {
+        const engine = await _silentLoadEngine(_getModelId());
+        if (engine) _onModelReady();
+    };
+
+    typeof requestIdleCallback === 'function'
+        ? requestIdleCallback(run, { timeout: 20000 })
+        : setTimeout(run, 8000);
+}
+
+/* ── Internal prompt runner (background, silent) ────────────────────────────── */
+
+async function _runPrompt(messages, maxTokens = 120, temp = 0.3) {
+    const engine = _engines.get(_getModelId());
+    if (!engine) return null;
+    try {
+        const reply = await engine.chat.completions.create({
+            messages, max_tokens: maxTokens, temperature: temp,
+        });
+        return (reply.choices[0]?.message?.content || '').trim();
+    } catch { return null; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   BACKGROUND TASK FUNCTIONS
+   All return null/[] if model not ready or on error — never throw, never block.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/** Suggest 1-3 hashtags for note text. Existing vocab keeps suggestions consistent. */
+export async function suggestTags(text, existingTagVocab = []) {
+    if (!_modelReady || text.length < 30) return [];
+    const vocab  = existingTagVocab.slice(0, 15).join(' ');
+    const prompt = `Suggest 1-3 hashtags for this journal note.${
+        vocab ? ` Prefer from these existing tags: ${vocab}` : ''
+    }\nReturn ONLY the tags space-separated (e.g. #focus #win).\nNote: "${text.slice(0, 250)}"\nTags:`;
+    const result = await _runPrompt([{ role: 'user', content: prompt }], 30, 0.2);
+    if (!result) return [];
+    return (result.match(/#\w+/g) || []).slice(0, 3).map(t => t.toLowerCase());
+}
+
+/** One thoughtful reflection question for the week. Cached per Monday key. */
+export async function generateWeeklyReflection(notes) {
+    if (!_modelReady || notes.length < 3) return null;
+    const key    = `ai_refl_${_mondayKey()}`;
+    const cached = localStorage.getItem(key);
+    if (cached) return cached;
+    const sample = notes.slice(-20).map(n => `• ${n.content.slice(0, 70)}`).join('\n');
+    const result = await _runPrompt([{
+        role: 'user',
+        content: `From these journal entries, ask ONE thoughtful question to help the person reflect on their week. Be specific to their content — not generic.\n${sample}\nQuestion:`,
+    }], 80, 0.5);
+    if (result) localStorage.setItem(key, result);
+    return result;
+}
+
+/** 2-sentence narrative of a day's work. Cached per dateKey. Auto-generates only for today. */
+export async function generateNarrativeSummary(notes, dateKey) {
+    if (!_modelReady || notes.length < 3) return null;
+    const key    = `ai_narrative_${dateKey}`;
+    const cached = localStorage.getItem(key);
+    if (cached) return cached;
+    const texts = notes
+        .slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+        .map(n => `[${new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}] ${n.content.slice(0, 80)}`)
+        .join('\n');
+    const result = await _runPrompt([{
+        role: 'user',
+        content: `Write 2 sentences summarising this person's workday. Be specific about what they did.\n${texts}\nSummary:`,
+    }], 90, 0.3);
+    if (result) localStorage.setItem(key, result);
+    return result;
+}
+
+/** Honest one-sentence alignment check vs the morning intention. Cached per dateKey. */
+export async function checkIntentionAlignment(intention, notes, dateKey) {
+    if (!_modelReady || notes.length < 3) return null;
+    const key    = `ai_alignment_${dateKey}`;
+    const cached = localStorage.getItem(key);
+    if (cached) return cached;
+    const texts = notes.slice(-12).map(n => n.content.slice(0, 70)).join('\n');
+    const result = await _runPrompt([{
+        role: 'user',
+        content: `Goal: "${intention}"\nNotes:\n${texts}\nIn one sentence, did these notes show progress toward the goal? Be honest but kind.\nAssessment:`,
+    }], 60, 0.3);
+    if (result) localStorage.setItem(key, result);
+    return result;
+}
+
+/** Fix grammar and clarity of a rough note. User-initiated — not cached. */
+export async function cleanupNote(text) {
+    if (!_modelReady || !text.trim()) return null;
+    return _runPrompt([{
+        role: 'user',
+        content: `Fix the grammar and clarity of this rough note. Keep the same meaning and approximate length. Return only the cleaned text.\nNote: "${text.slice(0, 500)}"\nCleaned:`,
+    }], 160, 0.2);
+}
+
+/** 2 specific behavioural patterns from recent entries. Cached per week. */
+export async function detectPatterns(notes) {
+    if (!_modelReady || notes.length < 10) return null;
+    const key    = `ai_patterns_${_mondayKey()}`;
+    const cached = localStorage.getItem(key);
+    if (cached) return cached;
+    const sample = notes.slice(-35).map(n => {
+        const day = new Date(n.timestamp).toLocaleDateString('en-US', { weekday: 'short' });
+        const t   = new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return `[${day} ${t}] ${n.content.slice(0, 55)}`;
+    }).join('\n');
+    const result = await _runPrompt([{
+        role: 'user',
+        content: `Find 2 specific patterns in these journal entries (time of day, recurring blockers, habits). Be concrete, not generic.\n${sample}\nPattern 1:\nPattern 2:`,
+    }], 110, 0.4);
+    if (result) localStorage.setItem(key, result);
+    return result;
+}
+
+/** Restructure a half-formed thought into a clear question or problem statement. */
+export async function structureThought(text) {
+    if (!_modelReady || !text.trim()) return null;
+    return _runPrompt([{
+        role: 'user',
+        content: `Rewrite this rough thought as a clear, specific question or problem statement in 1-2 sentences.\nThought: "${text.slice(0, 400)}"\nClear version:`,
+    }], 80, 0.3);
+}
+
+/** Classify a note's tone as 'positive', 'neutral', or 'negative'. */
+export async function classifyMood(text) {
+    if (!_modelReady || !text.trim()) return null;
+    const result = await _runPrompt([{
+        role: 'user',
+        content: `Classify the tone of this note as exactly one word: positive, neutral, or negative.\nNote: "${text.slice(0, 150)}"\nTone:`,
+    }], 5, 0.1);
+    if (!result) return null;
+    const l = result.toLowerCase();
+    return l.includes('positive') ? 'positive' : l.includes('negative') ? 'negative' : 'neutral';
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   FOREGROUND: explicit day summary (unchanged interface)
+   ══════════════════════════════════════════════════════════════════════════════ */
 
 export async function generateDailySummary() {
     const btn     = document.getElementById('summarize-btn');
@@ -67,6 +282,7 @@ export async function generateDailySummary() {
         return;
     }
     const dateKey  = dateMatch[1];
+    const { getDateIndex } = await import('./storage.js');
     const dayNotes = (getDateIndex().get(dateKey) || [])
         .slice()
         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -87,6 +303,8 @@ export async function generateDailySummary() {
         await yieldToMain();
 
         const engine = await loadEngine(modelId);
+        // Model is now warm — activate background features
+        if (!_modelReady) _onModelReady();
         hideDlProgress();
         status.textContent = 'Generating summary...';
         await yieldToMain();
@@ -216,7 +434,6 @@ export function initModelSelect() {
         document.getElementById('model-dl-note').textContent = isLoaded
             ? '✅ Model already loaded — no download needed.'
             : `⬇️ ${size} download once, then runs offline forever.`;
-        // Clear previous summary output but keep engines in memory
         document.getElementById('daily-summary-output').innerHTML = '';
         document.getElementById('daily-summary-output').classList.remove('has-content');
         document.getElementById('llm-status').textContent = '';

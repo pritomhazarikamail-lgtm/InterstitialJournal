@@ -8,14 +8,18 @@
  *  3. "✓ Done" on the anchor saves a #achieved note and hides the anchor.
  *  4. On subsequent opens today (banner already dismissed): restore the anchor
  *     if an intention was set and not yet achieved.
+ *  5. After 4 pm with 3+ notes, the AI checks whether notes show progress
+ *     toward the goal and shows a one-sentence assessment in the anchor.
+ *     This only runs if the AI model is already warm — zero cost otherwise.
  */
 
 import { saveNote }          from './crud.js';
 import { setNextUp }         from './write.js';
 import { getISODate, getLocalNotes } from './storage.js';
 import { showToast }         from './toast.js';
+import { isModelReady, checkIntentionAlignment } from './ai.js';
 
-const INTENTION_KEY  = 'today_intention_text'; // the text itself
+const INTENTION_KEY  = 'today_intention_text';
 const ACHIEVED_KEY   = 'today_intention_achieved';
 
 let _active = false; // prevent double-submit
@@ -103,6 +107,30 @@ function _showAnchor(text) {
         await saveNote(`✅ Achieved today's intention: ${text} #achieved #intention`);
         showToast('🎉 Intention achieved!');
     }, { once: true });
+
+    // AI alignment check — only after 4 pm with 3+ notes, only if model is warm
+    _tryAlignmentCheck(text);
+
+    // Also re-try when AI becomes ready (e.g. user clicks Summarize later)
+    document.addEventListener('ai-ready', () => _tryAlignmentCheck(text), { once: true });
+}
+
+function _tryAlignmentCheck(text) {
+    if (!isModelReady()) return;
+    const today = getISODate(new Date());
+    const hour  = new Date().getHours();
+    if (hour < 16) return;
+    const todayNotes = getLocalNotes().filter(n => n.dateKey === today);
+    if (todayNotes.length < 3) return;
+
+    const run = () => {
+        checkIntentionAlignment(text, todayNotes, today).then(result => {
+            if (!result) return;
+            const el = document.getElementById('intention-alignment');
+            if (el) { el.textContent = result; el.style.display = 'block'; }
+        });
+    };
+    typeof requestIdleCallback === 'function' ? requestIdleCallback(run) : setTimeout(run, 0);
 }
 
 function _dismiss() {

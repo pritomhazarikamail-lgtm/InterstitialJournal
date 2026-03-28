@@ -4,6 +4,11 @@
  * Only fires when the tab is hidden — no notification if the user is
  * already looking at the app. Uses a single `tag: 'checkin'` so
  * rapid-fire intervals stack into one notification, not a pile.
+ *
+ * Mobile note: Android Chrome and iOS (16.4+ PWA) require notifications to
+ * be sent via ServiceWorkerRegistration.showNotification(), not the page-level
+ * new Notification() constructor. We try the SW path first and fall back to
+ * the direct constructor for desktop browsers without a SW.
  */
 
 import { showToast } from './toast.js';
@@ -52,19 +57,36 @@ export function initReminders() {
     });
 }
 
+/** Send a notification via the Service Worker (mobile-compatible). */
+async function _notify() {
+    if (document.visibilityState === 'visible') return; // app is open, skip
+
+    const payload = {
+        body:     'Time to check in — what are you working on?',
+        icon:     '/InterstitialJournal/icon-192.png',
+        badge:    '/InterstitialJournal/icon-120.png', // Android status-bar icon
+        tag:      'checkin',   // replaces previous instead of stacking
+        renotify: true,
+    };
+
+    // SW path — required on Android Chrome and iOS 16.4+ PWA
+    if ('serviceWorker' in navigator) {
+        try {
+            const reg = await navigator.serviceWorker.ready;
+            await reg.showNotification('Interstitial Journal', payload);
+            return;
+        } catch { /* fall through to direct constructor */ }
+    }
+
+    // Desktop fallback
+    try {
+        new Notification('Interstitial Journal', payload);
+    } catch { /* permission revoked or unsupported */ }
+}
+
 function _start(intervalMins) {
     _stop();
-    _reminderInterval = setInterval(() => {
-        if (document.visibilityState === 'visible') return; // app is open, skip
-        try {
-            new Notification('Interstitial Journal', {
-                body:     'Time to check in — what are you working on?',
-                icon:     '/InterstitialJournal/icon-192.png',
-                tag:      'checkin',   // replaces previous instead of stacking
-                renotify: true,
-            });
-        } catch (e) { /* notification blocked or unsupported */ }
-    }, intervalMins * 60 * 1000);
+    _reminderInterval = setInterval(_notify, intervalMins * 60 * 1000);
 }
 
 function _stop() {

@@ -22,18 +22,18 @@
  * and the init() entry point.
  */
 
-import { saveNote, editNote, deleteNote, pinNote, toggleDarkMode, completeTodo, swipeDeleteNote } from './modules/crud.js';
+import { saveNote, editNote, deleteNote, pinNote, toggleDarkMode, completeTodo, swipeDeleteNote, applyNoteEdit } from './modules/crud.js';
 import { initGIS, handleAuthClick, initOfflineIndicator } from './modules/drive.js';
 import { initReminders } from './modules/reminders.js';
 import { initIntention }  from './modules/intention.js';
 import { renderFocus, startFocus, completeFocus, abandonFocus, pomoPauseResume, updateStreakUI } from './modules/pomodoro.js';
 import { changeMonth, openTagOverflow, closeTagOverflow, clearDateRange, restoreCalendarState, jumpToToday } from './modules/calendar.js';
-import { generateDailySummary, initModelSelect } from './modules/ai.js';
+import { generateDailySummary, initModelSelect, preloadModel, isModelReady, suggestTags, structureThought, cleanupNote, classifyMood } from './modules/ai.js';
 import { searchNotes, filterByTag, filterByDateRange } from './modules/search.js';
 import { showPage, toggleExportMenu, exportJSON, exportMarkdown, exportPrint, importNotes } from './modules/nav.js';
 import { updateLiveClock, updateLiveTimer } from './modules/timer.js';
 import { initNextUp, renderRecentStrip as renderRecentStripWrite, setNextUp, clearNextUp } from './modules/write.js';
-import { pruneDeletedIds } from './modules/storage.js';
+import { pruneDeletedIds, getTagIndex, getLocalNotes, sanitiseId, safeJSON } from './modules/storage.js';
 import { showToast } from './modules/toast.js';
 import { initDraft }  from './modules/draft.js';
 import { initVoice }  from './modules/voice.js';
@@ -52,6 +52,7 @@ const SLASH_COMMANDS = [
     { cmd: '/focus', icon: '🎯', desc: 'Note your current focus',      prefix: '🎯 ', tag: '#focus' },
     { cmd: '/idea',  icon: '💡', desc: 'Capture a quick idea',         prefix: '💡 ', tag: '#idea'  },
     { cmd: '/note',  icon: '📝', desc: 'Plain note (no prefix)',       prefix: '',    tag: ''       },
+    { cmd: '/think', icon: '🤔', desc: 'Structure a rough thought with AI', prefix: '', tag: ''    },
 ];
 
 const noteInput   = document.getElementById('note-input');
@@ -106,6 +107,26 @@ function setSlashActive(idx) {
 }
 
 function applySlashCommand(cmd) {
+    // /think: take existing textarea text, restructure it with AI
+    if (cmd.cmd === '/think') {
+        hideSlashDropdown();
+        const text = noteInput.value.replace(/\/think\s*$/i, '').trim();
+        if (!text) { noteInput.focus(); return; }
+        if (!isModelReady()) {
+            showToast('AI not ready — open a day and click Summarize first');
+            return;
+        }
+        showToast('🤔 Structuring thought...');
+        structureThought(text).then(result => {
+            if (!result) { showToast('Could not restructure — try again'); return; }
+            noteInput.value = result;
+            noteInput.dispatchEvent(new Event('input'));
+            showToast('✓ Thought structured');
+        });
+        noteInput.focus();
+        return;
+    }
+
     const val    = noteInput.value;
     const pos    = noteInput.selectionStart;
     const before = val.slice(0, pos);
@@ -127,7 +148,43 @@ function applySlashCommand(cmd) {
 }
 
 // crud.js dispatches 'hide-slash-dropdown' after saving so the dropdown closes
-document.addEventListener('hide-slash-dropdown', hideSlashDropdown);
+document.addEventListener('hide-slash-dropdown', () => {
+    hideSlashDropdown();
+    _hideTagSuggestions();
+});
+
+/* ── Tag suggestions ─────────────────────────────────────────────────────── */
+
+function _showTagSuggestions(tags, currentText) {
+    const container = document.getElementById('tag-suggestions');
+    if (!container) return;
+    container.textContent = '';
+    let shown = false;
+    tags.forEach(tag => {
+        if (currentText.toLowerCase().includes(tag)) return; // already in note
+        const pill = document.createElement('button');
+        pill.className   = 'tag-suggestion-pill';
+        pill.textContent = tag;
+        pill.type        = 'button';
+        pill.addEventListener('mousedown', e => {
+            e.preventDefault(); // don't blur textarea
+            noteInput.value = (noteInput.value.trimEnd() + ' ' + tag);
+            noteInput.dispatchEvent(new Event('input'));
+            _hideTagSuggestions();
+            noteInput.focus();
+        });
+        container.appendChild(pill);
+        shown = true;
+    });
+    container.style.display = shown ? 'flex' : 'none';
+}
+
+function _hideTagSuggestions() {
+    const container = document.getElementById('tag-suggestions');
+    if (container) { container.textContent = ''; container.style.display = 'none'; }
+}
+
+let _tagDebounce = null;
 
 noteInput.addEventListener('input', () => {
     const len = noteInput.value.length;
@@ -137,6 +194,21 @@ noteInput.addEventListener('input', () => {
     const query = getSlashContext(noteInput.value, noteInput.selectionStart);
     if (query !== null) showSlashDropdown(query);
     else hideSlashDropdown();
+
+    // AI tag suggestions — only when model is warm, debounced 2 s
+    clearTimeout(_tagDebounce);
+    if (len < 30 || !isModelReady()) { _hideTagSuggestions(); return; }
+    _tagDebounce = setTimeout(() => {
+        const text = noteInput.value.trim();
+        if (text.length < 30 || !isModelReady()) return;
+        const vocab = Array.from(getTagIndex().keys());
+        const run = async () => {
+            const tags = await suggestTags(text, vocab);
+            if (noteInput.value.trim() !== text) return; // text changed while waiting
+            _showTagSuggestions(tags, noteInput.value.toLowerCase());
+        };
+        typeof requestIdleCallback === 'function' ? requestIdleCallback(run) : run();
+    }, 2000);
 });
 
 noteInput.addEventListener('keydown', e => {
@@ -177,6 +249,58 @@ document.addEventListener('note-delete',       e => deleteNote(e.detail.id));
 document.addEventListener('note-complete',     e => completeTodo(e.detail.id));
 document.addEventListener('tag-filter',        e => filterByTag(e.detail.tag));
 document.addEventListener('note-swipe-delete', e => swipeDeleteNote(e.detail.id));
+
+// ✨ Note cleanup — user-initiated via the ✨ button on a note card
+document.addEventListener('note-cleanup', async e => {
+    const { id, btn } = e.detail;
+    const safeId = sanitiseId(id);
+    if (!safeId) return;
+    if (!isModelReady()) {
+        showToast('AI not ready — open a day and click Summarize first');
+        return;
+    }
+    const note = getLocalNotes().find(n => n.id === safeId);
+    if (!note) return;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+    const cleaned = await cleanupNote(note.content);
+    if (btn) { btn.disabled = false; btn.textContent = '✨'; }
+    if (!cleaned || cleaned.trim() === note.content.trim()) {
+        showToast('Note looks good already ✓');
+        return;
+    }
+    await applyNoteEdit(safeId, cleaned);
+    showToast('✨ Note cleaned up');
+});
+
+// Mood classification — fire-and-forget after each save, only if model warm
+document.addEventListener('note-saved', e => {
+    if (!isModelReady()) return;
+    const { id, content } = e.detail;
+    const run = () => {
+        classifyMood(content).then(mood => {
+            if (!mood) return;
+            const scores = safeJSON(localStorage.getItem('ai_mood_scores'), {});
+            scores[id]   = mood;
+            localStorage.setItem('ai_mood_scores', JSON.stringify(scores));
+            document.dispatchEvent(new CustomEvent('note-mood-update', { detail: { id, mood } }));
+        });
+    };
+    typeof requestIdleCallback === 'function' ? requestIdleCallback(run) : setTimeout(run, 100);
+});
+
+// Update mood dot on an already-rendered note card
+document.addEventListener('note-mood-update', e => {
+    const card = document.querySelector(`[data-note-id="${e.detail.id}"]`);
+    if (!card) return;
+    let dot = card.querySelector('.mood-dot');
+    if (!dot) {
+        dot = document.createElement('span');
+        const header = card.querySelector('.note-card-header');
+        if (header) header.appendChild(dot);
+    }
+    dot.className = `mood-dot mood-dot--${e.detail.mood}`;
+    dot.title     = e.detail.mood;
+});
 
 /* =============================================================================
  * EVENT WIRING
@@ -374,6 +498,9 @@ document.getElementById('install-dismiss')?.addEventListener('click', () => {
     initReminders();
     initIntention();
     initOfflineIndicator();
+    // Silently re-warm the AI model if the user has previously loaded it.
+    // Uses requestIdleCallback internally — zero cost if model was never used.
+    preloadModel();
 
     // Re-render recent strip on write page
     renderRecentStripWrite();
