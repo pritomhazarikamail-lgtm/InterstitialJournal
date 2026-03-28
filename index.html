@@ -154,13 +154,9 @@
 
         <!-- Persistent today's intention anchor (visible all day once set) -->
         <div id="intention-anchor" class="hidden">
-            <div class="intention-anchor-main">
-                <span class="intention-anchor-label">Today's goal</span>
-                <span id="intention-anchor-text"></span>
-                <button id="intention-anchor-done" class="intention-anchor-done-btn" aria-label="Mark intention as achieved" title="Mark as achieved">✓ Done</button>
-            </div>
-            <!-- AI alignment check — shown after 4 pm when model is warm -->
-            <div id="intention-alignment" class="intention-alignment" style="display:none;"></div>
+            <span class="intention-anchor-label">Today's goal</span>
+            <span id="intention-anchor-text"></span>
+            <button id="intention-anchor-done" class="intention-anchor-done-btn" aria-label="Mark intention as achieved" title="Mark as achieved">✓ Done</button>
         </div>
 
         <!-- Active focus / Pomodoro card (hidden when idle) -->
@@ -205,14 +201,10 @@
             <div id="slash-dropdown" style="display:none;" role="listbox" aria-label="Slash commands"></div>
             <button id="voice-btn" type="button" class="voice-btn" aria-label="Voice input" title="Voice input">🎤</button>
         </div>
-        <!-- AI tag suggestions — appear after debounced typing when AI is warm -->
         <div id="tag-suggestions" class="tag-suggestions" style="display:none;" aria-label="Suggested tags"></div>
 
         <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div style="display:flex;align-items:center;gap:8px;">
-                <div id="char-counter">0 / 5000</div>
-                <span id="ai-ready-badge" class="ai-ready-badge" style="display:none;" title="On-device AI ready">⚡ AI</span>
-            </div>
+            <div id="char-counter">0 / 5000</div>
             <button id="focus-mode-btn" class="focus-mode-btn" aria-label="Distraction-free writing mode" title="Focus mode">⛶ Focus</button>
         </div>
 
@@ -348,8 +340,6 @@
             <h3 id="selected-date-title"
                 style="font-size:0.78rem;color:var(--muted);margin-bottom:16px;
                        text-transform:uppercase;letter-spacing:0.08em;font-weight:700;"></h3>
-            <!-- AI narrative summary — auto-generated for today after noon -->
-            <div id="day-narrative" class="day-narrative" style="display:none;"></div>
             <div id="notes-list"></div>
         </div>
 

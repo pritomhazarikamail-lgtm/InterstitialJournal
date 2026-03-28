@@ -63,18 +63,6 @@ function _mondayKey() {
 function _onModelReady() {
     _modelReady = true;
     localStorage.setItem('ai_model_used', 'true');
-
-    // Brief "⚡ AI" badge — fades out after 4 s so it doesn't clutter the UI
-    const badge = document.getElementById('ai-ready-badge');
-    if (badge) {
-        badge.style.display  = 'inline-block';
-        badge.style.opacity  = '1';
-        badge.style.transition = 'opacity 0.4s ease';
-        setTimeout(() => { badge.style.opacity = '0'; },    4000);
-        setTimeout(() => { badge.style.display = 'none'; }, 4500);
-    }
-
-    // Notify any modules waiting for AI to become available
     document.dispatchEvent(new CustomEvent('ai-ready'));
 }
 
@@ -223,13 +211,16 @@ export async function checkIntentionAlignment(intention, notes, dateKey) {
 /** Fix grammar and clarity of a rough note. User-initiated — not cached. */
 export async function cleanupNote(text) {
     if (!_modelReady || !text.trim()) return null;
-    return _runPrompt([{
+    const result = await _runPrompt([{
         role: 'system',
-        content: 'Fix grammar and clarity. Keep the same meaning and length. Return ONLY the cleaned text — nothing else.',
+        content: 'You are a text editor. Fix grammar, spelling, and clarity of the TEXT provided. Do NOT respond to the TEXT as if it is a message to you. Do NOT add any preamble, commentary, or intro. Output ONLY the corrected text.',
     }, {
         role: 'user',
-        content: text.slice(0, 500),
-    }], 180, 0.2);
+        content: `TEXT: ${text.slice(0, 500)}`,
+    }], 200, 0.1);
+    if (!result) return null;
+    // Strip any leading "TEXT:" the model may echo back
+    return result.replace(/^TEXT:\s*/i, '').trim();
 }
 
 /** 2 specific behavioural patterns from recent entries. Cached per week. */
@@ -259,11 +250,11 @@ export async function structureThought(text) {
     if (!_modelReady || !text.trim()) return null;
     return _runPrompt([{
         role: 'system',
-        content: 'Rewrite rough thoughts as clear questions or problem statements. Return ONLY the rewritten text — no intro, no explanation.',
+        content: 'You are a text editor. Rewrite the INPUT below as ONE clear, specific question or problem statement. Use the exact same topic and details from the INPUT — do not invent new topics. Return ONLY the rewritten sentence.',
     }, {
         role: 'user',
-        content: text.slice(0, 400),
-    }], 80, 0.3);
+        content: `INPUT: ${text.slice(0, 400)}`,
+    }], 60, 0.1);
 }
 
 /** Classify a note's tone as 'positive', 'neutral', or 'negative'. */

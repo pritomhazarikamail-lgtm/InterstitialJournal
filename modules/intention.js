@@ -14,10 +14,9 @@
  */
 
 import { saveNote }          from './crud.js';
-import { setNextUp }         from './write.js';
+import { clearNextUp, getNextUp } from './write.js';
 import { getISODate, getLocalNotes } from './storage.js';
 import { showToast }         from './toast.js';
-import { isModelReady, checkIntentionAlignment } from './ai.js';
 
 const INTENTION_KEY  = 'today_intention_text';
 const ACHIEVED_KEY   = 'today_intention_achieved';
@@ -42,6 +41,13 @@ export function initIntention() {
         || _findAchievedInNotes(today);
     if (savedText && !alreadyAchieved) {
         _showAnchor(savedText);
+        // Intention is pinned in the anchor strip — clear it from the textarea placeholder
+        // (handles existing next_up values set before this was removed from _submit)
+        if (getNextUp() === savedText) {
+            clearNextUp();
+            const noteInput = document.getElementById('note-input');
+            if (noteInput) noteInput.placeholder = 'What are you working on? Use #tags or type / for commands...';
+        }
     }
 
     // Show banner only if today hasn't been handled yet
@@ -104,33 +110,13 @@ function _showAnchor(text) {
     doneBtn?.addEventListener('click', async () => {
         anchor.classList.add('hidden');
         localStorage.setItem(ACHIEVED_KEY, '1');
+        // Clear the intention from the Next Up field and reset the textarea placeholder
+        clearNextUp();
+        const noteInput = document.getElementById('note-input');
+        if (noteInput) noteInput.placeholder = 'What are you working on? Use #tags or type / for commands...';
         await saveNote(`✅ Achieved today's intention: ${text} #achieved #intention`);
         showToast('🎉 Intention achieved!');
     }, { once: true });
-
-    // AI alignment check — only after 4 pm with 3+ notes, only if model is warm
-    _tryAlignmentCheck(text);
-
-    // Also re-try when AI becomes ready (e.g. user clicks Summarize later)
-    document.addEventListener('ai-ready', () => _tryAlignmentCheck(text), { once: true });
-}
-
-function _tryAlignmentCheck(text) {
-    if (!isModelReady()) return;
-    const today = getISODate(new Date());
-    const hour  = new Date().getHours();
-    if (hour < 16) return;
-    const todayNotes = getLocalNotes().filter(n => n.dateKey === today);
-    if (todayNotes.length < 3) return;
-
-    const run = () => {
-        checkIntentionAlignment(text, todayNotes, today).then(result => {
-            if (!result) return;
-            const el = document.getElementById('intention-alignment');
-            if (el) { el.textContent = result; el.style.display = 'block'; }
-        });
-    };
-    typeof requestIdleCallback === 'function' ? requestIdleCallback(run) : setTimeout(run, 0);
 }
 
 function _dismiss() {
@@ -158,11 +144,22 @@ async function _submit() {
     // Show the persistent anchor strip
     _showAnchor(text);
 
-    // Pre-load as the day's Next Up anchor
-    setNextUp(text);
-    const noteInput = document.getElementById('note-input');
-    if (noteInput) noteInput.placeholder = text;
 
     await saveNote(`🎯 Today's intention: ${text} #intention #focus`);
     showToast("Intention set — let's go 🎯");
 }
+
+// When Drive sync delivers intention data from another device, update the anchor
+// without requiring a page reload. drive.js dispatches this after mergeNotes.
+document.addEventListener('intention-sync', () => {
+    const text     = localStorage.getItem(INTENTION_KEY);
+    const achieved = localStorage.getItem(ACHIEVED_KEY);
+    const anchor   = document.getElementById('intention-anchor');
+    if (!anchor) return;
+    if (achieved) { anchor.classList.add('hidden'); return; }
+    if (text) {
+        const textEl = document.getElementById('intention-anchor-text');
+        if (textEl) textEl.textContent = text;
+        anchor.classList.remove('hidden');
+    }
+});

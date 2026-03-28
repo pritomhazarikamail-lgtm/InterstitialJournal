@@ -8,8 +8,8 @@
  */
 
 import {
-    validateNote, sanitiseId, getLocalNotes, setLocalNotes,
-    getDeletedIds, setDeletedIds, getISODate,
+    validateNote, sanitiseId, generateId, getLocalNotes, setLocalNotes,
+    getDeletedIds, setDeletedIds, recordDeletedAt, getISODate,
 } from './storage.js';
 import { showModal }  from './modal.js';
 import { showToast, showUndoToast }  from './toast.js';
@@ -26,7 +26,7 @@ export async function saveNote(manualText = null) {
     if (text.length > 5000) { showToast('Note too long (max 5000 chars)'); return; }
 
     const newNote = validateNote({
-        id:        Date.now(),
+        id:        generateId(),
         timestamp: new Date().toISOString(),
         content:   text,
         dateKey:   getISODate(new Date()),
@@ -123,7 +123,7 @@ export async function deleteNote(id) {
     setLocalNotes(getLocalNotes().filter(n => n.id !== safeId));
 
     const delSet = new Set(getDeletedIds());
-    if (!delSet.has(safeId)) { delSet.add(safeId); setDeletedIds(Array.from(delSet)); }
+    if (!delSet.has(safeId)) { delSet.add(safeId); setDeletedIds(Array.from(delSet)); recordDeletedAt(safeId); }
 
     renderAll();
     document.getElementById('notes-list').innerHTML = '';
@@ -206,6 +206,7 @@ export function swipeDeleteNote(id) {
             const delSet = new Set(getDeletedIds());
             delSet.add(safeId);
             setDeletedIds(Array.from(delSet));
+            recordDeletedAt(safeId);
             markDirty();
         }
     }, 5200);

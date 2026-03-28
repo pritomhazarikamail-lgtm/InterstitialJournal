@@ -5,6 +5,11 @@
  * already looking at the app. Uses a single `tag: 'checkin'` so
  * rapid-fire intervals stack into one notification, not a pile.
  *
+ * Mobile reliability: setInterval is suspended when the tab is backgrounded
+ * on Android/iOS. Instead we use visibilitychange + a stored last-fire
+ * timestamp so the check fires when the user leaves and when they return,
+ * regardless of how long the tab was suspended.
+ *
  * Mobile note: Android Chrome and iOS (16.4+ PWA) require notifications to
  * be sent via ServiceWorkerRegistration.showNotification(), not the page-level
  * new Notification() constructor. We try the SW path first and fall back to
@@ -13,7 +18,9 @@
 
 import { showToast } from './toast.js';
 
-let _reminderInterval = null;
+const LAST_FIRE_KEY = 'reminder_last_fire';
+let _intervalMins   = 0;
+let _listenerAdded  = false;
 
 export function initReminders() {
     const sel = document.getElementById('reminder-select');
@@ -61,6 +68,8 @@ export function initReminders() {
 async function _notify() {
     if (document.visibilityState === 'visible') return; // app is open, skip
 
+    localStorage.setItem(LAST_FIRE_KEY, String(Date.now()));
+
     const payload = {
         body:     'Time to check in — what are you working on?',
         icon:     '/InterstitialJournal/icon-192.png',
@@ -84,13 +93,35 @@ async function _notify() {
     } catch { /* permission revoked or unsupported */ }
 }
 
+/**
+ * Check whether enough time has passed since the last fire.
+ * Called on visibilitychange (both hide and show).
+ */
+function _checkAndMaybeNotify() {
+    if (_intervalMins <= 0) return;
+    const last    = parseInt(localStorage.getItem(LAST_FIRE_KEY) || '0', 10);
+    const elapsed = Date.now() - last;
+    if (elapsed >= _intervalMins * 60 * 1000) {
+        _notify();
+    }
+}
+
 function _start(intervalMins) {
     _stop();
-    _reminderInterval = setInterval(_notify, intervalMins * 60 * 1000);
+    _intervalMins = intervalMins;
+    localStorage.setItem(LAST_FIRE_KEY, String(Date.now())); // reset timer on start
+
+    // visibilitychange fires reliably on mobile even when setInterval is frozen.
+    // Fire when tab goes to background (user leaves app) AND when tab comes back
+    // (catches the case where the tab was suspended for a long time).
+    if (!_listenerAdded) {
+        _listenerAdded = true;
+        document.addEventListener('visibilitychange', _checkAndMaybeNotify);
+    }
 }
 
 function _stop() {
-    if (_reminderInterval) { clearInterval(_reminderInterval); _reminderInterval = null; }
+    _intervalMins = 0;
 }
 
 function _updateHint(mins) {

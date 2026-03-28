@@ -348,12 +348,18 @@ export function mergeNotes(driveData) {
     }
 
     // Sync today's intention text + achieved flag so the anchor appears on other devices
+    let _intentionChanged = false;
     if (typeof driveData?.todayIntention === 'string' && driveData.todayIntention
             && !localStorage.getItem('today_intention_text')) {
         localStorage.setItem('today_intention_text', driveData.todayIntention.slice(0, 200));
+        _intentionChanged = true;
     }
     if (driveData?.intentionAchieved && !localStorage.getItem('today_intention_achieved')) {
         localStorage.setItem('today_intention_achieved', '1');
+        _intentionChanged = true;
+    }
+    if (_intentionChanged) {
+        document.dispatchEvent(new CustomEvent('intention-sync'));
     }
 
     const driveNotes   = rawDriveNotes.map(validateNote).filter(Boolean);

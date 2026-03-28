@@ -102,8 +102,13 @@ export function filterByDateRange() {
     uiState.activeTag = null;
     clearTagActive();
 
-    const from = uiState.dateFrom ? new Date(uiState.dateFrom) : new Date(0);
-    const to   = uiState.dateTo   ? new Date(uiState.dateTo + 'T23:59:59') : new Date(8640000000000000);
+    // Parse YYYY-MM-DD explicitly to avoid browser-dependent Date string parsing
+    const _parseDate = (str, endOfDay = false) => {
+        const [y, m, d] = str.split('-').map(Number);
+        return endOfDay ? new Date(y, m - 1, d, 23, 59, 59, 999) : new Date(y, m - 1, d);
+    };
+    const from = uiState.dateFrom ? _parseDate(uiState.dateFrom) : new Date(0);
+    const to   = uiState.dateTo   ? _parseDate(uiState.dateTo, true) : new Date(8640000000000000);
 
     const filtered = getLocalNotes()
         .filter(n => { const d = new Date(n.timestamp); return d >= from && d <= to; })

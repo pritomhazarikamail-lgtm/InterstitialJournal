@@ -11,7 +11,6 @@
 
 import { getLocalNotes } from './storage.js';
 import { formatDuration } from './calendar.js';
-import { isModelReady, generateWeeklyReflection, detectPatterns } from './ai.js';
 
 function _toKey(d) {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -124,63 +123,6 @@ export function showWeeklyDigest() {
             content.appendChild(tagRow);
         }
 
-        // ── AI section (reflection + patterns) ────────────────────
-        // Only runs if the model is already warm — no performance cost otherwise.
-        if (isModelReady() && notes.length >= 3) {
-            const aiSection = document.createElement('div');
-            aiSection.className = 'weekly-ai-section';
-            content.appendChild(aiSection);
-
-            // Reflection question — async, appended when ready
-            const run = () => {
-                generateWeeklyReflection(notes).then(question => {
-                    if (!question) return;
-                    const divider = document.createElement('div');
-                    divider.className = 'weekly-ai-divider';
-                    const qEl = document.createElement('p');
-                    qEl.className   = 'weekly-reflection-q';
-                    qEl.textContent = question;
-                    aiSection.prepend(qEl);
-                    aiSection.prepend(divider);
-                });
-
-                // Pattern detection — only if enough data
-                if (notes.length >= 10) {
-                    detectPatterns(getLocalNotes()).then(patternsText => {
-                        if (!patternsText) return;
-                        const lines = patternsText
-                            .split('\n')
-                            // Strip numbering, markdown bold, "Pattern N:" prefixes, preamble lines
-                            .map(l => l
-                                .replace(/^\*{1,2}Pattern\s*\d*[:.\s]*/i, '')
-                                .replace(/^\*{1,2}/, '')
-                                .replace(/\*{1,2}$/, '')
-                                .replace(/^[\d]+[.)]\s*/, '')
-                                .replace(/^[-•]\s*/, '')
-                                .trim()
-                            )
-                            // Drop intro lines ("Here are...", "I identified...", etc.)
-                            .filter(l => l.length > 10 && !/^here (are|is)/i.test(l) && !/^i (found|identified|noticed)/i.test(l))
-                            .slice(0, 2);
-                        if (!lines.length) return;
-                        const patWrap = document.createElement('div');
-                        patWrap.className = 'weekly-patterns';
-                        const patLabel = document.createElement('div');
-                        patLabel.className   = 'weekly-patterns-label';
-                        patLabel.textContent = '📈 Patterns';
-                        patWrap.appendChild(patLabel);
-                        lines.forEach(line => {
-                            const p = document.createElement('p');
-                            p.className   = 'weekly-pattern-item';
-                            p.textContent = line;
-                            patWrap.appendChild(p);
-                        });
-                        aiSection.appendChild(patWrap);
-                    });
-                }
-            };
-            typeof requestIdleCallback === 'function' ? requestIdleCallback(run) : setTimeout(run, 0);
-        }
     }
 
     overlay.classList.remove('hidden');

@@ -54,12 +54,10 @@ export function toggleExportMenu() {
 export function exportJSON() {
     document.getElementById('export-menu').classList.add('hidden');
     const blob = new Blob([JSON.stringify(getLocalNotes(), null, 2)], { type: 'application/json' });
-    const a    = Object.assign(document.createElement('a'), {
-        href:     URL.createObjectURL(blob),
-        download: `journal-${getISODate(new Date())}.json`,
-    });
+    const href = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), { href, download: `journal-${getISODate(new Date())}.json` });
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => URL.revokeObjectURL(href), 1000);
 }
 
 export function exportMarkdown() {
@@ -87,12 +85,10 @@ export function exportMarkdown() {
     });
 
     const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
-    const a    = Object.assign(document.createElement('a'), {
-        href:     URL.createObjectURL(blob),
-        download: `journal-${getISODate(new Date())}.md`,
-    });
+    const href = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), { href, download: `journal-${getISODate(new Date())}.md` });
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => URL.revokeObjectURL(href), 1000);
 }
 
 export function exportPrint() {

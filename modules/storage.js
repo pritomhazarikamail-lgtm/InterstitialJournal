@@ -7,10 +7,21 @@
 
 /* ── Security Helpers ──────────────────────────────────────────────────────── */
 
-/** Sanitise a note ID. IDs are Date.now() integers; reject everything else. */
+/** Sanitise a note ID. IDs are positive safe integers; reject everything else. */
 export function sanitiseId(id) {
     const n = Number(id);
     return Number.isInteger(n) && n > 0 && n <= Number.MAX_SAFE_INTEGER ? n : null;
+}
+
+/**
+ * Monotonically-increasing ID generator.
+ * Guarantees uniqueness even when two saves occur in the same millisecond.
+ */
+let _lastId = 0;
+export function generateId() {
+    const id = Math.max(Date.now(), _lastId + 1);
+    _lastId = id;
+    return id;
 }
 
 /** Validate & normalise a single note object. Returns null if malformed. */
@@ -94,12 +105,35 @@ export function setDeletedIds(ids) {
 }
 
 /**
- * Prune tombstones that are older than `maxAgeDays`.
+ * Record the wall-clock time at which a note was deleted.
+ * Stored separately from the ID list so the ID format stays unchanged
+ * and all existing callers (drive.js, crud.js) require no changes.
+ */
+export function recordDeletedAt(id) {
+    const safeId = sanitiseId(id);
+    if (!safeId) return;
+    const map = safeJSON(localStorage.getItem('journal_deleted_at'), {});
+    map[safeId] = Date.now();
+    localStorage.setItem('journal_deleted_at', JSON.stringify(map));
+}
+
+/**
+ * Prune tombstones whose DELETION TIME is older than `maxAgeDays`.
+ * Uses the separate deletedAt map rather than the note creation ID,
+ * so recently deleted old notes are pruned correctly.
  * Called on init for non-sync users so the list doesn't grow unbounded.
- * Sync users keep tombstones indefinitely (needed for cross-device propagation).
  */
 export function pruneDeletedIds(maxAgeDays = 30) {
-    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
-    const pruned = getDeletedIds().filter(id => id > cutoff);
+    const cutoff   = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    const atMap    = safeJSON(localStorage.getItem('journal_deleted_at'), {});
+    const pruned   = getDeletedIds().filter(id => {
+        const deletedAt = atMap[id];
+        // If no deletedAt recorded (old tombstone), keep it to be safe
+        return deletedAt === undefined || deletedAt > cutoff;
+    });
+    // Clean up the atMap entries for pruned IDs
+    const keptSet = new Set(pruned);
+    Object.keys(atMap).forEach(k => { if (!keptSet.has(Number(k))) delete atMap[k]; });
     setDeletedIds(pruned);
+    localStorage.setItem('journal_deleted_at', JSON.stringify(atMap));
 }

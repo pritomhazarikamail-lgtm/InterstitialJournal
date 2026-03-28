@@ -28,12 +28,12 @@ import { initReminders } from './modules/reminders.js';
 import { initIntention }  from './modules/intention.js';
 import { renderFocus, startFocus, completeFocus, abandonFocus, pomoPauseResume, updateStreakUI } from './modules/pomodoro.js';
 import { changeMonth, openTagOverflow, closeTagOverflow, clearDateRange, restoreCalendarState, jumpToToday } from './modules/calendar.js';
-import { generateDailySummary, initModelSelect, preloadModel, isModelReady, suggestTags, structureThought, cleanupNote, classifyMood } from './modules/ai.js';
+import { generateDailySummary, initModelSelect, preloadModel, isModelReady, cleanupNote } from './modules/ai.js';
 import { searchNotes, filterByTag, filterByDateRange } from './modules/search.js';
 import { showPage, toggleExportMenu, exportJSON, exportMarkdown, exportPrint, importNotes } from './modules/nav.js';
 import { updateLiveClock, updateLiveTimer } from './modules/timer.js';
 import { initNextUp, renderRecentStrip as renderRecentStripWrite, setNextUp, clearNextUp } from './modules/write.js';
-import { pruneDeletedIds, getTagIndex, getLocalNotes, sanitiseId, safeJSON } from './modules/storage.js';
+import { pruneDeletedIds, getLocalNotes, sanitiseId, getTagIndex } from './modules/storage.js';
 import { showToast } from './modules/toast.js';
 import { initDraft }  from './modules/draft.js';
 import { initVoice }  from './modules/voice.js';
@@ -52,7 +52,6 @@ const SLASH_COMMANDS = [
     { cmd: '/focus', icon: '🎯', desc: 'Note your current focus',      prefix: '🎯 ', tag: '#focus' },
     { cmd: '/idea',  icon: '💡', desc: 'Capture a quick idea',         prefix: '💡 ', tag: '#idea'  },
     { cmd: '/note',  icon: '📝', desc: 'Plain note (no prefix)',       prefix: '',    tag: ''       },
-    { cmd: '/think', icon: '🤔', desc: 'Structure a rough thought with AI', prefix: '', tag: ''    },
 ];
 
 const noteInput   = document.getElementById('note-input');
@@ -107,26 +106,6 @@ function setSlashActive(idx) {
 }
 
 function applySlashCommand(cmd) {
-    // /think: take existing textarea text, restructure it with AI
-    if (cmd.cmd === '/think') {
-        hideSlashDropdown();
-        const text = noteInput.value.replace(/\/think\s*$/i, '').trim();
-        if (!text) { noteInput.focus(); return; }
-        if (!isModelReady()) {
-            showToast('AI not ready — open a day and click Summarize first');
-            return;
-        }
-        showToast('🤔 Structuring thought...');
-        structureThought(text).then(result => {
-            if (!result) { showToast('Could not restructure — try again'); return; }
-            noteInput.value = result;
-            noteInput.dispatchEvent(new Event('input'));
-            showToast('✓ Thought structured');
-        });
-        noteInput.focus();
-        return;
-    }
-
     const val    = noteInput.value;
     const pos    = noteInput.selectionStart;
     const before = val.slice(0, pos);
@@ -153,7 +132,7 @@ document.addEventListener('hide-slash-dropdown', () => {
     _hideTagSuggestions();
 });
 
-/* ── Tag suggestions ─────────────────────────────────────────────────────── */
+/* ── Tag suggestions (vocab-based, instant, no AI) ──────────────────────── */
 
 function _showTagSuggestions(tags, currentText) {
     const container = document.getElementById('tag-suggestions');
@@ -161,13 +140,13 @@ function _showTagSuggestions(tags, currentText) {
     container.textContent = '';
     let shown = false;
     tags.forEach(tag => {
-        if (currentText.toLowerCase().includes(tag)) return; // already in note
+        if (currentText.includes(tag)) return;
         const pill = document.createElement('button');
         pill.className   = 'tag-suggestion-pill';
         pill.textContent = tag;
         pill.type        = 'button';
         pill.addEventListener('mousedown', e => {
-            e.preventDefault(); // don't blur textarea
+            e.preventDefault();
             noteInput.value = (noteInput.value.trimEnd() + ' ' + tag);
             noteInput.dispatchEvent(new Event('input'));
             _hideTagSuggestions();
@@ -186,32 +165,30 @@ function _hideTagSuggestions() {
 
 let _tagDebounce = null;
 
-noteInput.addEventListener('input', () => {
+noteInput?.addEventListener('input', () => {
     const len = noteInput.value.length;
     charCounter.textContent = `${len} / 5000`;
     charCounter.classList.toggle('warn', len >= 4500);
 
     const query = getSlashContext(noteInput.value, noteInput.selectionStart);
-    if (query !== null) showSlashDropdown(query);
-    else hideSlashDropdown();
+    if (query !== null) { showSlashDropdown(query); _hideTagSuggestions(); return; }
+    hideSlashDropdown();
 
-    // AI tag suggestions — only when model is warm, debounced 2 s
+    // Vocab-based tag suggestions — instant, no AI
     clearTimeout(_tagDebounce);
-    if (len < 30 || !isModelReady()) { _hideTagSuggestions(); return; }
+    if (len < 20) { _hideTagSuggestions(); return; }
     _tagDebounce = setTimeout(() => {
-        const text = noteInput.value.trim();
-        if (text.length < 30 || !isModelReady()) return;
-        const vocab = Array.from(getTagIndex().keys());
-        const run = async () => {
-            const tags = await suggestTags(text, vocab);
-            if (noteInput.value.trim() !== text) return; // text changed while waiting
-            _showTagSuggestions(tags, noteInput.value.toLowerCase());
-        };
-        typeof requestIdleCallback === 'function' ? requestIdleCallback(run) : run();
-    }, 2000);
+        const text = noteInput.value.toLowerCase();
+        const suggestions = Array.from(getTagIndex().entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([tag]) => tag)
+            .filter(tag => !text.includes(tag))
+            .slice(0, 3);
+        _showTagSuggestions(suggestions, text);
+    }, 400);
 });
 
-noteInput.addEventListener('keydown', e => {
+noteInput?.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { saveNote(); return; }
     if (slashDropdown.style.display === 'none') return;
 
@@ -272,35 +249,6 @@ document.addEventListener('note-cleanup', async e => {
     showToast('✨ Note cleaned up');
 });
 
-// Mood classification — fire-and-forget after each save, only if model warm
-document.addEventListener('note-saved', e => {
-    if (!isModelReady()) return;
-    const { id, content } = e.detail;
-    const run = () => {
-        classifyMood(content).then(mood => {
-            if (!mood) return;
-            const scores = safeJSON(localStorage.getItem('ai_mood_scores'), {});
-            scores[id]   = mood;
-            localStorage.setItem('ai_mood_scores', JSON.stringify(scores));
-            document.dispatchEvent(new CustomEvent('note-mood-update', { detail: { id, mood } }));
-        });
-    };
-    typeof requestIdleCallback === 'function' ? requestIdleCallback(run) : setTimeout(run, 100);
-});
-
-// Update mood dot on an already-rendered note card
-document.addEventListener('note-mood-update', e => {
-    const card = document.querySelector(`[data-note-id="${e.detail.id}"]`);
-    if (!card) return;
-    let dot = card.querySelector('.mood-dot');
-    if (!dot) {
-        dot = document.createElement('span');
-        const header = card.querySelector('.note-card-header');
-        if (header) header.appendChild(dot);
-    }
-    dot.className = `mood-dot mood-dot--${e.detail.mood}`;
-    dot.title     = e.detail.mood;
-});
 
 /* =============================================================================
  * EVENT WIRING
@@ -309,43 +257,43 @@ document.addEventListener('note-mood-update', e => {
  * Keeps the CSP tight and avoids global namespace pollution.
  * ============================================================================= */
 
-document.getElementById('save-btn').addEventListener('click', () => saveNote());
-document.getElementById('focus-btn').addEventListener('click', startFocus);
-document.getElementById('complete-focus-btn').addEventListener('click', completeFocus);
-document.getElementById('pomo-pause-btn').addEventListener('click', pomoPauseResume);
-document.getElementById('pomo-abandon-btn').addEventListener('click', abandonFocus);
-document.getElementById('nav-write').addEventListener('click', () => showPage('home-page'));
-document.getElementById('nav-history').addEventListener('click', () => showPage('history-page'));
-document.getElementById('nav-sync').addEventListener('click', handleAuthClick);
-document.getElementById('nav-theme').addEventListener('click', toggleDarkMode);
-document.getElementById('prev-month-btn').addEventListener('click', () => changeMonth(-1));
-document.getElementById('next-month-btn').addEventListener('click', () => changeMonth(1));
+document.getElementById('save-btn')?.addEventListener('click', () => saveNote());
+document.getElementById('focus-btn')?.addEventListener('click', startFocus);
+document.getElementById('complete-focus-btn')?.addEventListener('click', completeFocus);
+document.getElementById('pomo-pause-btn')?.addEventListener('click', pomoPauseResume);
+document.getElementById('pomo-abandon-btn')?.addEventListener('click', abandonFocus);
+document.getElementById('nav-write')?.addEventListener('click', () => showPage('home-page'));
+document.getElementById('nav-history')?.addEventListener('click', () => showPage('history-page'));
+document.getElementById('nav-sync')?.addEventListener('click', handleAuthClick);
+document.getElementById('nav-theme')?.addEventListener('click', toggleDarkMode);
+document.getElementById('prev-month-btn')?.addEventListener('click', () => changeMonth(-1));
+document.getElementById('next-month-btn')?.addEventListener('click', () => changeMonth(1));
 
 // Export dropdown
-document.getElementById('export-btn').addEventListener('click', toggleExportMenu);
-document.getElementById('export-json-btn').addEventListener('click', exportJSON);
-document.getElementById('export-md-btn').addEventListener('click', exportMarkdown);
-document.getElementById('export-print-btn').addEventListener('click', exportPrint);
+document.getElementById('export-btn')?.addEventListener('click', toggleExportMenu);
+document.getElementById('export-json-btn')?.addEventListener('click', exportJSON);
+document.getElementById('export-md-btn')?.addEventListener('click', exportMarkdown);
+document.getElementById('export-print-btn')?.addEventListener('click', exportPrint);
 
-document.getElementById('import-file').addEventListener('change', importNotes);
+document.getElementById('import-file')?.addEventListener('change', importNotes);
 
 // Date range filter
-document.getElementById('date-from').addEventListener('change', filterByDateRange);
-document.getElementById('date-to').addEventListener('change', filterByDateRange);
-document.getElementById('date-range-clear').addEventListener('click', () => {
+document.getElementById('date-from')?.addEventListener('change', filterByDateRange);
+document.getElementById('date-to')?.addEventListener('change', filterByDateRange);
+document.getElementById('date-range-clear')?.addEventListener('click', () => {
     clearDateRange();
     restoreCalendarState();
 });
 
 // Tag overflow popover
-document.getElementById('tag-more-btn').addEventListener('click', e => {
+document.getElementById('tag-more-btn')?.addEventListener('click', e => {
     e.stopPropagation();
     const popover = document.getElementById('tag-overflow-popover');
-    if (popover.classList.contains('hidden')) openTagOverflow();
+    if (popover?.classList.contains('hidden')) openTagOverflow();
     else closeTagOverflow();
 });
 
-document.getElementById('tag-overflow-close').addEventListener('click', () => closeTagOverflow());
+document.getElementById('tag-overflow-close')?.addEventListener('click', () => closeTagOverflow());
 
 document.addEventListener('click', e => {
     const wrap = document.getElementById('tag-cloud-wrap');
@@ -354,12 +302,12 @@ document.addEventListener('click', e => {
 
 // Debounced search
 let _searchDebounce = null;
-document.getElementById('search-input').addEventListener('input', () => {
+document.getElementById('search-input')?.addEventListener('input', () => {
     clearTimeout(_searchDebounce);
     _searchDebounce = setTimeout(searchNotes, 160);
 });
 
-document.getElementById('summarize-btn').addEventListener('click', generateDailySummary);
+document.getElementById('summarize-btn')?.addEventListener('click', generateDailySummary);
 
 // Jump to today
 document.getElementById('today-btn')?.addEventListener('click', () => {
@@ -419,7 +367,7 @@ document.addEventListener('keydown', e => {
 
 // Next Up input
 const nextUpInput = document.getElementById('next-up-input');
-nextUpInput.addEventListener('input', () => {
+nextUpInput?.addEventListener('input', () => {
     const val = nextUpInput.value.trim();
     if (val) setNextUp(val);
     else     clearNextUp();
