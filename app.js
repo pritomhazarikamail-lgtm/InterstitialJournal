@@ -22,8 +22,10 @@
  * and the init() entry point.
  */
 
-import { saveNote, editNote, deleteNote, pinNote, toggleDarkMode } from './modules/crud.js';
-import { initGIS, handleAuthClick } from './modules/drive.js';
+import { saveNote, editNote, deleteNote, pinNote, toggleDarkMode, completeTodo } from './modules/crud.js';
+import { initGIS, handleAuthClick, initOfflineIndicator } from './modules/drive.js';
+import { initReminders } from './modules/reminders.js';
+import { initIntention }  from './modules/intention.js';
 import { renderFocus, startFocus, completeFocus, abandonFocus, pomoPauseResume, updateStreakUI } from './modules/pomodoro.js';
 import { changeMonth, openTagOverflow, closeTagOverflow, clearDateRange, restoreCalendarState } from './modules/calendar.js';
 import { generateDailySummary, initModelSelect } from './modules/ai.js';
@@ -42,6 +44,7 @@ const SLASH_COMMANDS = [
     { cmd: '/win',   icon: '🏆', desc: 'Log a win or achievement',     prefix: '🏆 ', tag: '#win'   },
     { cmd: '/todo',  icon: '☐',  desc: 'Add a checkbox task',          prefix: '☐ ',  tag: '#todo'  },
     { cmd: '/block', icon: '🚫', desc: 'Tag a distraction or blocker', prefix: '🚫 ', tag: '#block' },
+    { cmd: '/handoff', icon: '🔄', desc: 'Log a task transition (from → to)', prefix: '🔄 Switching from: ', tag: '#transition' },
     { cmd: '/focus', icon: '🎯', desc: 'Note your current focus',      prefix: '🎯 ', tag: '#focus' },
     { cmd: '/idea',  icon: '💡', desc: 'Capture a quick idea',         prefix: '💡 ', tag: '#idea'  },
     { cmd: '/note',  icon: '📝', desc: 'Plain note (no prefix)',       prefix: '',    tag: ''       },
@@ -164,10 +167,11 @@ document.addEventListener('click', e => {
  * which would create circular dependencies.
  * ============================================================================= */
 
-document.addEventListener('note-pin',    e => pinNote(e.detail.id));
-document.addEventListener('note-edit',   e => editNote(e.detail.id));
-document.addEventListener('note-delete', e => deleteNote(e.detail.id));
-document.addEventListener('tag-filter',  e => filterByTag(e.detail.tag));
+document.addEventListener('note-pin',      e => pinNote(e.detail.id));
+document.addEventListener('note-edit',     e => editNote(e.detail.id));
+document.addEventListener('note-delete',   e => deleteNote(e.detail.id));
+document.addEventListener('note-complete', e => completeTodo(e.detail.id));
+document.addEventListener('tag-filter',    e => filterByTag(e.detail.tag));
 
 /* =============================================================================
  * EVENT WIRING
@@ -301,6 +305,9 @@ document.getElementById('install-dismiss')?.addEventListener('click', () => {
     updateStreakUI();
     initNextUp();
     initModelSelect();
+    initReminders();
+    initIntention();
+    initOfflineIndicator();
 
     // Re-render recent strip on write page
     renderRecentStripWrite();

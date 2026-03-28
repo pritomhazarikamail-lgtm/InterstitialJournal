@@ -1373,3 +1373,146 @@ button.primary-btn:active { transform: scale(0.98) translateY(0); }
         color: black !important;
     }
 }
+
+/* ═══════════════════════════════════════════════════
+   23. DAILY INTENTION BANNER
+   ═══════════════════════════════════════════════════ */
+#intention-banner {
+    background: var(--accent-soft);
+    border: 1.5px solid var(--accent);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    margin-bottom: 18px;
+    animation: slideDown 0.22s ease;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.intention-prompt {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 10px;
+    line-height: 1.4;
+}
+
+#intention-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--card-bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    margin-bottom: 10px;
+    transition: border-color 0.15s;
+}
+
+#intention-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.intention-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.intention-skip-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    padding: 7px 14px;
+    transition: color 0.15s;
+}
+
+.intention-skip-btn:hover { color: var(--text); }
+
+/* ═══════════════════════════════════════════════════
+   24. CHECK-IN REMINDER ROW
+   ═══════════════════════════════════════════════════ */
+#reminder-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+    padding: 9px 14px;
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
+}
+
+#reminder-label {
+    font-size: 0.8rem;
+    color: var(--muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+#reminder-select {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card-bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.8rem;
+    padding: 4px 7px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+#reminder-hint {
+    font-size: 0.75rem;
+    color: var(--muted);
+    flex: 1;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ═══════════════════════════════════════════════════
+   25. DAY DIGEST STATS BAR
+   ═══════════════════════════════════════════════════ */
+#day-digest {
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 8px 12px;
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
+    margin-bottom: 14px;
+}
+
+/* ═══════════════════════════════════════════════════
+   26. TODO COMPLETION CHECKBOX
+   ═══════════════════════════════════════════════════ */
+.todo-check-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    margin-right: 1px;
+    cursor: pointer;
+    font-size: inherit;
+    color: var(--accent);
+    vertical-align: baseline;
+    line-height: inherit;
+    transition: transform 0.1s;
+    font-family: inherit;
+}
+
+.todo-check-btn:hover {
+    transform: scale(1.25);
+}

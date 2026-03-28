@@ -118,6 +118,22 @@ export async function pinNote(id) {
     showToast(notes[idx].pinned ? '📌 Pinned' : 'Unpinned');
 }
 
+export async function completeTodo(id) {
+    const safeId = sanitiseId(id);
+    if (!safeId) return;
+    const notes = getLocalNotes();
+    const note  = notes.find(n => n.id === safeId);
+    if (!note || !note.content.startsWith('☐')) return;
+
+    // Strip the checkbox and any trailing #todo tag to get clean task text
+    const taskText = note.content
+        .replace(/^☐\s*/, '')
+        .replace(/\s*#todo\b/gi, '')
+        .trim();
+
+    await saveNote(`✅ Done: ${taskText} #done`);
+}
+
 export function toggleDarkMode() {
     const isDark = document.body.classList.toggle('dark-mode');
     localStorage.setItem('dark_mode', String(isDark));

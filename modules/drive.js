@@ -162,6 +162,23 @@ export function updateSyncUI(icon, text) {
     document.getElementById('sync-text').textContent = text;
 }
 
+export function initOfflineIndicator() {
+    function handleOffline() {
+        updateSyncUI('📵', 'Offline');
+    }
+    function handleOnline() {
+        // Only restore default if we're currently showing the offline state
+        const syncText = document.getElementById('sync-text');
+        if (syncText?.textContent === 'Offline') {
+            updateSyncUI('☁️', 'Sync');
+        }
+    }
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online',  handleOnline);
+    // Apply immediately if already offline
+    if (!navigator.onLine) handleOffline();
+}
+
 /* ── API fetch wrapper ──────────────────────────────────────────────────────
  * Enforces googleapis.com as the only allowed host.
  * SECURITY: Prevents token leakage if a URL is ever constructed from

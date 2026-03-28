@@ -82,7 +82,21 @@ export function buildNoteCard(n, showDate = false) {
     contentDiv.style.cssText = 'margin:10px 0;font-size:1.05rem;';
     n.content.split('\n').forEach((line, li) => {
         if (li > 0) contentDiv.appendChild(document.createElement('br'));
-        contentDiv.appendChild(document.createTextNode(line));
+        // First line of a todo note gets a tappable checkbox
+        if (li === 0 && line.startsWith('☐')) {
+            const cb = document.createElement('button');
+            cb.className = 'todo-check-btn';
+            cb.textContent = '☐';
+            cb.setAttribute('aria-label', 'Mark as done');
+            cb.addEventListener('click', e => {
+                e.stopPropagation();
+                document.dispatchEvent(new CustomEvent('note-complete', { detail: { id: n.id } }));
+            });
+            contentDiv.appendChild(cb);
+            contentDiv.appendChild(document.createTextNode(line.slice(1)));
+        } else {
+            contentDiv.appendChild(document.createTextNode(line));
+        }
     });
     card.appendChild(contentDiv);
 
@@ -113,6 +127,34 @@ export function buildNoteCard(n, showDate = false) {
     return card;
 }
 
+/* ── Day digest ────────────────────────────────────────────────────────────── */
+
+function renderDayDigest(dayNotes) {
+    const el = document.getElementById('day-digest');
+    if (!el) return;
+    if (dayNotes.length === 0) { el.style.display = 'none'; return; }
+
+    // Total tracked time: span from first to last note
+    const sorted    = dayNotes.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const trackedMs = new Date(sorted[sorted.length - 1].timestamp) - new Date(sorted[0].timestamp);
+
+    // Tag counts — top 3 by frequency
+    const tagCounts = new Map();
+    dayNotes.forEach(n => (n.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
+    const topTags = Array.from(tagCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([t, c]) => `${t} ×${c}`)
+        .join(' · ');
+
+    const parts = [`${dayNotes.length} entr${dayNotes.length === 1 ? 'y' : 'ies'}`];
+    if (dayNotes.length > 1) parts.push(`${formatDuration(trackedMs)} tracked`);
+    if (topTags) parts.push(topTags);
+
+    el.textContent = parts.join('  ·  ');
+    el.style.display = 'block';
+}
+
 /* ── Day timeline ──────────────────────────────────────────────────────────── */
 
 export function showNotesForDay(dateKey) {
@@ -128,6 +170,7 @@ export function showNotesForDay(dateKey) {
         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
     document.getElementById('selected-date-title').textContent = `Notes for ${dateKey}`;
+    renderDayDigest(dayNotes);
     list.innerHTML = '';
 
     if (dayNotes.length === 0) {

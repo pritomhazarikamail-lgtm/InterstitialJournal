@@ -140,6 +140,18 @@
             </div>
         </header>
 
+        <!-- Daily intention banner (shown once per day on first open) -->
+        <div id="intention-banner" class="hidden">
+            <p class="intention-prompt">What's the one thing that would make today a win?</p>
+            <input type="text" id="intention-input" maxlength="200"
+                   placeholder="Today's main goal..." autocomplete="off"
+                   aria-label="Today's intention">
+            <div class="intention-actions">
+                <button id="intention-skip" class="intention-skip-btn">Skip</button>
+                <button id="intention-set" class="primary-btn" style="padding:8px 18px;">Set intention</button>
+            </div>
+        </div>
+
         <!-- Active focus / Pomodoro card (hidden when idle) -->
         <div id="focus-section" class="hidden">
             <div class="focus-card" id="focus-card" style="margin-bottom:24px;">
@@ -205,6 +217,18 @@
         <div id="recent-strip" style="display:none;">
             <div class="recent-strip-label">Recent</div>
             <div id="recent-notes-list"></div>
+        </div>
+
+        <!-- Check-in reminder settings -->
+        <div id="reminder-row">
+            <label for="reminder-select" id="reminder-label">🔔 Check-in</label>
+            <select id="reminder-select" aria-label="Check-in reminder interval">
+                <option value="0">Off</option>
+                <option value="15">Every 15 min</option>
+                <option value="30">Every 30 min</option>
+                <option value="60">Every hour</option>
+            </select>
+            <span id="reminder-hint">Off</span>
         </div>
 
     </div><!-- /#home-page -->
@@ -298,6 +322,9 @@
                 </div>
                 <div id="daily-summary-output"></div>
             </div>
+
+            <!-- Day digest stats bar — populated by calendar.js -->
+            <div id="day-digest" style="display:none;"></div>
 
             <h3 id="selected-date-title"
                 style="font-size:0.78rem;color:var(--muted);margin-bottom:16px;
