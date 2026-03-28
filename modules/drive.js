@@ -272,8 +272,13 @@ export async function uploadToDrive() {
         }
     }
 
-    const focusStreak = parseInt(localStorage.getItem('focus_streak') || '0', 10);
-    const payload  = JSON.stringify({ notes: getLocalNotes(), deletedIds: getDeletedIds(), focusStreak });
+    const focusStreak      = parseInt(localStorage.getItem('focus_streak') || '0', 10);
+    const nextUp           = localStorage.getItem('next_up') || '';
+    const lastIntentionDate = localStorage.getItem('last_intention_date') || '';
+    const payload  = JSON.stringify({
+        notes: getLocalNotes(), deletedIds: getDeletedIds(),
+        focusStreak, nextUp, lastIntentionDate,
+    });
     const metadata = driveFileId ? {} : { name: 'journal_data.json', parents: ['appDataFolder'] };
     const boundary = 'journal_sync_v1';
     const body =
@@ -310,6 +315,23 @@ export function mergeNotes(driveData) {
         const merged = Math.max(local, driveData.focusStreak);
         localStorage.setItem('focus_streak', String(merged));
         updateStreakUI();
+    }
+
+    // Sync lastIntentionDate — take whichever date is more recent so the banner
+    // doesn't re-fire on a second device after you've already set the intention
+    if (typeof driveData?.lastIntentionDate === 'string' && driveData.lastIntentionDate) {
+        const local = localStorage.getItem('last_intention_date') || '';
+        if (driveData.lastIntentionDate > local) {
+            localStorage.setItem('last_intention_date', driveData.lastIntentionDate);
+        }
+    }
+
+    // Sync next_up — propagate intention to other devices only if they haven't
+    // set their own Next Up (avoids overwriting a deliberate local choice)
+    if (typeof driveData?.nextUp === 'string' && driveData.nextUp && !localStorage.getItem('next_up')) {
+        localStorage.setItem('next_up', driveData.nextUp.slice(0, 200));
+        const noteInput = document.getElementById('note-input');
+        if (noteInput && !noteInput.value.trim()) noteInput.placeholder = driveData.nextUp;
     }
 
     const driveNotes   = rawDriveNotes.map(validateNote).filter(Boolean);
