@@ -2,7 +2,7 @@
  * modules/nav.js — Page navigation, export/import, recent strip integration
  */
 
-import { getLocalNotes, setLocalNotes, validateNote, safeJSON, getISODate } from './storage.js';
+import { getLocalNotes, setLocalNotes, getDeletedIds, validateNote, safeJSON, getISODate } from './storage.js';
 import { uiState } from './state.js';
 import { renderAll, clearTagActive, clearDateRange, restoreCalendarState } from './calendar.js';
 import { renderRecentStrip } from './write.js';
@@ -119,10 +119,13 @@ export async function importNotes(e) {
         });
         if (!confirmed) { e.target.value = ''; return; }
 
-        // Last-writer-wins merge (same strategy as Drive sync)
-        const existing = getLocalNotes();
-        const merged   = new Map(existing.map(n => [n.id, n]));
+        // Last-writer-wins merge — identical strategy to Drive sync,
+        // including tombstone filter so deliberately deleted notes don't resurface
+        const existing  = getLocalNotes();
+        const deleted   = new Set(getDeletedIds());
+        const merged    = new Map(existing.map(n => [n.id, n]));
         incoming.forEach(n => {
+            if (deleted.has(n.id)) return;          // skip tombstoned notes
             const ex = merged.get(n.id);
             if (!ex || new Date(n.timestamp) > new Date(ex.timestamp)) merged.set(n.id, n);
         });

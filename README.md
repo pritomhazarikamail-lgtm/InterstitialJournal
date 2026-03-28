@@ -87,20 +87,22 @@ Most journaling systems ask you to reflect once a day. Interstitial journaling f
   - **SmolLM2 360M** (~200 MB) — lightest option, plain reflection style
 - Downloaded once, cached in IndexedDB, works offline forever after
 
-### ☁️ Google Drive Sync
+### ☁️ Google Drive Sync *(optional)*
+- Entirely optional — the app is fully functional without ever signing in
 - Syncs your journal to Google Drive `appDataFolder` — a private, app-sandboxed space no other app or person can access
 - **Last-writer-wins merge** for multi-device use
 - **Tombstone-based deletion** so deleted notes stay deleted across all devices
 - Syncs focus streak, daily intention (text + achieved state), and Next Up across devices
-- Silent background sync on tab focus and every 5 minutes when signed in; visibilitychange listener registered exactly once
+- Silent background sync on tab focus and every 5 minutes when signed in; `visibilitychange` listener registered exactly once — no duplicate listeners
 - OAuth token auto-refreshes 5 minutes before expiry — session stays alive indefinitely without prompting
+- Google Sign-In SDK load is retried for up to ~10 s then silently abandoned — ad-blockers and offline starts cause no errors or loops
 - **Offline indicator** — the Sync button shows `📵 Offline` when disconnected and restores automatically
 
 ### 📦 Data Portability
 - **Export → JSON** — full machine-readable backup of all notes
 - **Export → Markdown** — human-readable, grouped by date with timestamps
 - **Export → Print / PDF** — browser print dialog with a clean `@media print` layout
-- **Import** — load a JSON backup; notes are **merged** with last-writer-wins strategy, so existing notes are never overwritten. A confirmation modal shows the note count before committing.
+- **Import** — load a JSON backup; notes are **merged** with last-writer-wins strategy and tombstone filtering (deliberately deleted notes are never restored). A confirmation modal shows the note count before committing.
 
 ### 🌙 Appearance
 - Dark mode by default

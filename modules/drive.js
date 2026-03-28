@@ -66,6 +66,7 @@ function _scheduleTokenRefresh(expiresInMs) {
  * ─────────────────────────────────────────────────────────────────────────── */
 
 export function markDirty() {
+    if (!accessToken) return;   // no-op for non-sync users — skip timer entirely
     _isDirty = true;
     clearTimeout(_uploadTimer);
     _uploadTimer = setTimeout(_flushIfDirty, UPLOAD_DEBOUNCE);
@@ -88,8 +89,14 @@ async function _flushIfDirty() {
  * re-auths with no UI if the Google session is still active.
  * ─────────────────────────────────────────────────────────────────────────── */
 
+let _gisRetries = 0;
 export function initGIS() {
-    if (!window.google?.accounts) { setTimeout(initGIS, 500); return; }
+    if (!window.google?.accounts) {
+        // Give up after ~10 s (ad-blockers, offline, CSP failures all land here)
+        if (++_gisRetries < 20) setTimeout(initGIS, 500);
+        return;
+    }
+    _gisRetries = 0;
 
     tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,

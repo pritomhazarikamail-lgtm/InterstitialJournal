@@ -33,6 +33,7 @@ import { searchNotes, filterByTag, filterByDateRange } from './modules/search.js
 import { showPage, toggleExportMenu, exportJSON, exportMarkdown, exportPrint, importNotes } from './modules/nav.js';
 import { updateLiveClock, updateLiveTimer } from './modules/timer.js';
 import { initNextUp, renderRecentStrip as renderRecentStripWrite, setNextUp, clearNextUp } from './modules/write.js';
+import { pruneDeletedIds } from './modules/storage.js';
 import { showToast } from './modules/toast.js';
 import { initDraft }  from './modules/draft.js';
 import { initVoice }  from './modules/voice.js';
@@ -361,6 +362,9 @@ document.getElementById('install-dismiss')?.addEventListener('click', () => {
         const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
         setTimeout(() => { updateLiveClock(); setInterval(updateLiveClock, 60000); }, msToNextMinute);
     })();
+
+    // Non-sync users don't need tombstones older than 30 days
+    if (localStorage.getItem('auto_sync_enabled') !== 'true') pruneDeletedIds(30);
 
     updateStreakUI();
     initNextUp();

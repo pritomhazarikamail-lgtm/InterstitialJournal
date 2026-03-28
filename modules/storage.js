@@ -92,3 +92,14 @@ export function getDeletedIds() {
 export function setDeletedIds(ids) {
     localStorage.setItem('journal_deleted_ids', JSON.stringify(ids));
 }
+
+/**
+ * Prune tombstones that are older than `maxAgeDays`.
+ * Called on init for non-sync users so the list doesn't grow unbounded.
+ * Sync users keep tombstones indefinitely (needed for cross-device propagation).
+ */
+export function pruneDeletedIds(maxAgeDays = 30) {
+    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    const pruned = getDeletedIds().filter(id => id > cutoff);
+    setDeletedIds(pruned);
+}
