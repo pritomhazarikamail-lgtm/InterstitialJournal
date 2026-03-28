@@ -1,7 +1,7 @@
 'use strict';
 
 /* ============================================================
- * Interstitial Journal — Service Worker  v16
+ * Interstitial Journal — Service Worker  v19
  *
  * Strategy: Cache-first for shell assets, stale-while-revalidate
  * for fonts/CDN, network-first (with cache fallback) for
@@ -24,13 +24,18 @@
  *    the current one.
  * ============================================================ */
 
-const CACHE_VERSION = 'journal-v18';
+const CACHE_VERSION = 'journal-v19';
 
 const SHELL_ASSETS = [
     './',
     './index.html',
     './manifest.json',
-    './journal_icon.png',
+    './icon-192.webp',
+    './icon-192.png',
+    './icon-512.png',
+    './icon-180.png',
+    './icon-152.png',
+    './icon-120.png',
 ];
 
 const CDN_ORIGINS = [

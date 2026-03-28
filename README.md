@@ -86,12 +86,19 @@ Once installed, the app runs fully offline.
 ### Self-host
 
 ```
-index.html       ← HTML structure
-style.css        ← All styles
-app.js           ← All logic (ES module)
-manifest.json    ← PWA metadata
-sw.js            ← Service worker (offline caching, v18)
-journal_icon.png ← App icon
+index.html          ← HTML structure
+style.css           ← All styles
+app.js              ← Orchestrator (imports from modules/)
+manifest.json       ← PWA metadata
+sw.js               ← Service worker (offline caching, v18)
+modules/            ← Feature modules (storage, crud, drive, ai, …)
+icon-512.webp       ← App icon (512 px, WebP)
+icon-512.png        ← App icon (512 px, PNG fallback)
+icon-192.webp       ← App icon (192 px, WebP)
+icon-192.png        ← App icon (192 px, PNG — used for PWA maskable)
+icon-180.png        ← Apple touch icon (180 px)
+icon-152.png        ← Apple touch icon (152 px)
+icon-120.png        ← Apple touch icon (120 px)
 ```
 
 Clone and serve from any static host:
@@ -138,40 +145,61 @@ python3 -m http.server 8080
 
 ```
 InterstitialJournal/
-├── index.html        # App shell — HTML structure only (~350 lines)
-├── style.css         # All styles, 22 labelled sections (~1370 lines)
-├── app.js            # All logic as an ES module, 17 sections (~1850 lines)
-├── manifest.json     # PWA manifest
-├── sw.js             # Service worker v18
-├── journal_icon.png  # App icon
+├── index.html           # App shell — HTML structure only (~350 lines)
+├── style.css            # All styles, 22 labelled sections (~1370 lines)
+├── app.js               # Thin orchestrator — slash commands, event wiring, init
+├── modules/
+│   ├── state.js         # Shared UI filter state (uiState)
+│   ├── storage.js       # Security helpers, notes cache, date/tag indices
+│   ├── modal.js         # Custom modal (replaces prompt/confirm)
+│   ├── toast.js         # Ephemeral toast notifications
+│   ├── timer.js         # Live clock + "time since last entry" nudge
+│   ├── write.js         # Next Up field + Recent strip
+│   ├── drive.js         # Google Drive sync
+│   ├── calendar.js      # Calendar heatmap, day timeline, note cards, tag cloud
+│   ├── crud.js          # saveNote, editNote, deleteNote, pinNote, toggleDarkMode
+│   ├── pomodoro.js      # Focus timer, Pomodoro cycle, streak UI
+│   ├── ai.js            # On-device AI summary via WebLLM
+│   ├── search.js        # Full-text search, tag filter, date range filter
+│   └── nav.js           # Page navigation, export/import
+├── manifest.json        # PWA manifest
+├── sw.js                # Service worker v18
+├── icon-512.webp        # App icon 512 px (WebP, 13 KB)
+├── icon-512.png         # App icon 512 px (PNG fallback, 262 KB)
+├── icon-192.webp        # App icon 192 px (WebP, 4 KB)
+├── icon-192.png         # App icon 192 px (PNG maskable, 40 KB)
+├── icon-180.png         # Apple touch icon 180 px
+├── icon-152.png         # Apple touch icon 152 px
+├── icon-120.png         # Apple touch icon 120 px
 └── README.md
 ```
 
-### `app.js` sections
+### `modules/` dependency tree
 
-1. Security helpers (`sanitiseId`, `validateNote`, `safeJSON`)
-2. Notes cache (localStorage wrapper with invalidation)
-3. Custom modal (replaces `prompt()` / `confirm()`)
-4. Toast notifications
-5. Config & state (including `_activeTag`, `_dateFrom`, `_dateTo`)
-6. Slash commands
-7. Next Up field
-8. Recent strip
-9. Google Drive sync
-10. Pomodoro + Focus timer
-11. CRUD (`saveNote`, `editNote`, `deleteNote`, `pinNote`, `toggleDarkMode`)
-12. Calendar & History (`renderCalendar`, `showNotesForDay`, `buildNoteCard`)
-13. AI summary (on-device via WebLLM)
-14. Search & Tags (`searchNotes`, `filterByDateRange`, `filterByTag`, `renderTagCloud`)
-15. Navigation & utilities (`exportJSON`, `exportMarkdown`, `exportPrint`)
-16. Event wiring
-17. Init
+```
+state.js          (no deps)
+storage.js        (no deps)
+modal.js          (no deps)
+toast.js          (no deps)
+timer.js          ← storage
+write.js          ← storage
+calendar.js       ← storage, state          (fires custom DOM events instead of importing crud/search)
+drive.js          ← storage, toast, calendar
+search.js         ← storage, state, calendar
+crud.js           ← storage, modal, toast, drive, calendar, write, timer
+pomodoro.js       ← toast, modal, crud, timer
+ai.js             (self-contained, dynamic import of WebLLM)
+nav.js            ← storage, state, calendar, write, toast
+app.js            ← all modules             (routes note-pin/edit/delete/tag-filter custom events)
+```
+
+Circular dependencies are broken with custom DOM events: `buildNoteCard` in `calendar.js` fires `note-pin`, `note-edit`, `note-delete` and `tag-filter` events on `document` rather than importing `crud.js` or `search.js`. `app.js` listens for these and calls the appropriate functions.
 
 ### `style.css` sections
 
 1–18: Design Tokens, Base, Layout, Cards & Timeline, Form Elements, Buttons, Tags & Tag Cloud, Search, Calendar, Home Header, Recent Strip, Focus Card & Pomodoro Ring, Modal, Toast, AI Summary, Slash Command Dropdown, Next Up Field, Misc/Utilities
 
-19–22 (new): Pinned Entries, Export Dropdown, Date Range Filter, Print/PDF (`@media print`)
+19–22: Pinned Entries, Export Dropdown, Date Range Filter, Print/PDF (`@media print`)
 
 ---
 

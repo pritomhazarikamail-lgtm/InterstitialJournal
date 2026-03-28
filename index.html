@@ -55,10 +55,10 @@
 
     <link rel="manifest" href="manifest.json">
 
-    <!-- Apple touch icons at common sizes for best quality on all devices -->
-    <link rel="apple-touch-icon" sizes="180x180" href="journal_icon.png">
-    <link rel="apple-touch-icon" sizes="152x152" href="journal_icon.png">
-    <link rel="apple-touch-icon" sizes="120x120" href="journal_icon.png">
+    <!-- Apple touch icons — sized PNGs (iOS does not support WebP for home-screen icons) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="icon-152.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="icon-120.png">
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -99,7 +99,7 @@
      padding:14px 20px calc(14px + env(safe-area-inset-bottom));
      flex-direction:column;gap:10px;box-shadow:0 -8px 24px rgba(0,0,0,0.12);">
     <div style="display:flex;align-items:center;gap:12px;">
-        <img src="journal_icon.png" width="40" height="40" style="border-radius:10px;flex-shrink:0;" alt="">
+        <img src="icon-120.png" width="40" height="40" style="border-radius:10px;flex-shrink:0;" alt="">
         <div>
             <div style="font-weight:700;font-size:0.9rem;">Add to Home Screen</div>
             <div style="font-size:0.78rem;color:var(--muted);">Install for the best offline experience</div>

@@ -1,0 +1,75 @@
+{
+  "dependencies": {
+    "@mlc-ai/web-llm": {
+      "version": "latest",
+      "url": "https://esm.run/@mlc-ai/web-llm",
+      "cdn": "esm.run",
+      "purpose": "On-device LLM inference (AI day summary). Loaded dynamically only when the user clicks Summarize.",
+      "loaded": "dynamic import in modules/ai.js",
+      "requires": "WebGPU"
+    },
+    "google-gsi": {
+      "version": "latest",
+      "url": "https://accounts.google.com/gsi/client",
+      "cdn": "Google (official)",
+      "purpose": "Google Identity Services — OAuth2 token client for Google Drive sync.",
+      "loaded": "script tag in index.html (async defer)",
+      "requires": null
+    }
+  },
+  "fonts": {
+    "Instrument Serif": {
+      "url": "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap",
+      "provider": "Google Fonts",
+      "purpose": "Heading / display typeface"
+    },
+    "DM Sans": {
+      "url": "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap",
+      "provider": "Google Fonts",
+      "purpose": "UI body typeface"
+    }
+  },
+  "external_apis": {
+    "google_drive_v3": {
+      "base_url": "https://www.googleapis.com/drive/v3",
+      "scope": "https://www.googleapis.com/auth/drive.appdata",
+      "purpose": "Optional cloud sync — stores journal_data.json in a private, app-sandboxed Drive folder.",
+      "used_in": "modules/drive.js"
+    },
+    "google_oauth": {
+      "base_url": "https://accounts.google.com",
+      "purpose": "OAuth2 token exchange for Drive access.",
+      "used_in": "modules/drive.js"
+    }
+  },
+  "ai_models": {
+    "Llama-3.2-1B-Instruct-q4f16_1-MLC": {
+      "size": "~700 MB",
+      "source": "Hugging Face / MLC registry",
+      "purpose": "Structured AI summary (Wins / Themes / Reflection). Recommended model.",
+      "cached_in": "IndexedDB (browser)"
+    },
+    "SmolLM2-360M-Instruct-q4f16_1-MLC": {
+      "size": "~200 MB",
+      "source": "Hugging Face / MLC registry",
+      "purpose": "Plain-reflection AI summary. Lightest option.",
+      "cached_in": "IndexedDB (browser)"
+    }
+  },
+  "cdn_allowlist": [
+    "https://esm.run",
+    "https://esm.sh",
+    "https://cdn.jsdelivr.net",
+    "https://accounts.google.com",
+    "https://www.googleapis.com",
+    "https://fonts.googleapis.com",
+    "https://fonts.gstatic.com",
+    "https://huggingface.co",
+    "https://hf.co"
+  ],
+  "notes": {
+    "no_npm": "This project has no npm/Node dependencies. All external code is loaded from CDN at runtime.",
+    "offline": "After first load, the app runs fully offline. CDN assets are cached by the service worker (sw.js). AI models are cached in IndexedDB by WebLLM.",
+    "privacy": "No analytics, tracking, or telemetry dependencies of any kind."
+  }
+}
