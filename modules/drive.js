@@ -38,6 +38,7 @@ export let accessToken = null;
 let driveFileId   = localStorage.getItem(DRIVE_FILE_ID_KEY) || null;
 let syncInterval  = null;
 let isSyncing     = false;
+let _visibilityListenerAdded = false; // guard against duplicate listeners
 
 // Dirty flag — set by markDirty() on any CRUD write, cleared after upload
 let _isDirty    = false;
@@ -134,12 +135,15 @@ export function initGIS() {
 export function startPeriodicSync() {
     if (syncInterval) return;
 
-    // Sync on tab focus (reliable even when interval is throttled)
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && accessToken && !isSyncing) {
-            syncWithDrive(true); // silent
-        }
-    });
+    // Sync on tab focus — guard prevents duplicate listeners if called again
+    if (!_visibilityListenerAdded) {
+        _visibilityListenerAdded = true;
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && accessToken && !isSyncing) {
+                syncWithDrive(true); // silent
+            }
+        });
+    }
 
     // Fallback interval for tabs that stay in the foreground
     syncInterval = setInterval(() => {
@@ -272,12 +276,14 @@ export async function uploadToDrive() {
         }
     }
 
-    const focusStreak      = parseInt(localStorage.getItem('focus_streak') || '0', 10);
-    const nextUp           = localStorage.getItem('next_up') || '';
+    const focusStreak       = parseInt(localStorage.getItem('focus_streak') || '0', 10);
+    const nextUp            = localStorage.getItem('next_up') || '';
     const lastIntentionDate = localStorage.getItem('last_intention_date') || '';
+    const todayIntention    = localStorage.getItem('today_intention_text') || '';
+    const intentionAchieved = localStorage.getItem('today_intention_achieved') || '';
     const payload  = JSON.stringify({
         notes: getLocalNotes(), deletedIds: getDeletedIds(),
-        focusStreak, nextUp, lastIntentionDate,
+        focusStreak, nextUp, lastIntentionDate, todayIntention, intentionAchieved,
     });
     const metadata = driveFileId ? {} : { name: 'journal_data.json', parents: ['appDataFolder'] };
     const boundary = 'journal_sync_v1';
@@ -334,6 +340,15 @@ export function mergeNotes(driveData) {
         if (noteInput && !noteInput.value.trim()) noteInput.placeholder = driveData.nextUp;
     }
 
+    // Sync today's intention text + achieved flag so the anchor appears on other devices
+    if (typeof driveData?.todayIntention === 'string' && driveData.todayIntention
+            && !localStorage.getItem('today_intention_text')) {
+        localStorage.setItem('today_intention_text', driveData.todayIntention.slice(0, 200));
+    }
+    if (driveData?.intentionAchieved && !localStorage.getItem('today_intention_achieved')) {
+        localStorage.setItem('today_intention_achieved', '1');
+    }
+
     const driveNotes   = rawDriveNotes.map(validateNote).filter(Boolean);
     const driveDeleted = rawDriveDeleted.map(sanitiseId).filter(Boolean);
 
@@ -352,7 +367,7 @@ export function mergeNotes(driveData) {
     setDeletedIds(Array.from(allDeleted));
 
     const titleEl = document.getElementById('selected-date-title');
-    if (titleEl.textContent.startsWith('Notes for ')) {
+    if (titleEl?.textContent?.startsWith('Notes for ')) {
         showNotesForDay(titleEl.textContent.replace('Notes for ', '').trim());
     }
     renderAll();

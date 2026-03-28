@@ -12,8 +12,9 @@ import {
     getDeletedIds, setDeletedIds, getISODate,
 } from './storage.js';
 import { showModal }  from './modal.js';
-import { showToast }  from './toast.js';
+import { showToast, showUndoToast }  from './toast.js';
 import { markDirty }  from './drive.js';
+import { haptic }     from './haptic.js';
 import { renderAll, showNotesForDay } from './calendar.js';
 import { renderRecentStrip, setNextUp, clearNextUp } from './write.js';
 import { updateLiveTimer } from './timer.js';
@@ -37,6 +38,9 @@ export async function saveNote(manualText = null) {
     notes.push(newNote);
     setLocalNotes(notes);
 
+    // Always clear draft (covers both manual and programmatic saves like completeTodo)
+    document.dispatchEvent(new CustomEvent('hide-slash-dropdown'));
+
     if (!manualText) {
         const nextUpInput = document.getElementById('next-up-input');
         const charCounter = document.getElementById('char-counter');
@@ -44,7 +48,6 @@ export async function saveNote(manualText = null) {
         noteInput.value = '';
         charCounter.textContent = '0 / 5000';
         charCounter.classList.remove('warn');
-        document.dispatchEvent(new CustomEvent('hide-slash-dropdown'));
 
         if (nextUp) {
             noteInput.placeholder = nextUp;
@@ -59,6 +62,7 @@ export async function saveNote(manualText = null) {
 
     updateLiveTimer();
     markDirty();
+    haptic([8]);
     showToast('Note saved ✓');
 }
 
@@ -102,6 +106,7 @@ export async function deleteNote(id) {
     document.getElementById('selected-date-title').textContent = '';
     document.getElementById('llm-controls').style.display = 'none';
     markDirty();
+    haptic([20, 40, 20]);
     showToast('Note deleted');
 }
 
@@ -115,6 +120,7 @@ export async function pinNote(id) {
     setLocalNotes(notes);
     showNotesForDay(notes[idx].dateKey);
     markDirty();
+    haptic([5]);
     showToast(notes[idx].pinned ? '📌 Pinned' : 'Unpinned');
 }
 
@@ -132,6 +138,53 @@ export async function completeTodo(id) {
         .trim();
 
     await saveNote(`✅ Done: ${taskText} #done`);
+}
+
+/**
+ * Swipe-to-delete: removes the note visually immediately, then shows a
+ * 5-second undo window. Only adds the tombstone after the undo window expires.
+ * Called from app.js on the 'note-swipe-delete' custom event.
+ */
+export function swipeDeleteNote(id) {
+    const safeId = sanitiseId(id);
+    if (!safeId) return;
+    const notes   = getLocalNotes();
+    const idx     = notes.findIndex(n => n.id === safeId);
+    if (idx === -1) return;
+
+    const deletedNote = notes[idx];
+    setLocalNotes(notes.filter(n => n.id !== safeId));
+    renderAll();
+    // Refresh the open day view so the card disappears immediately
+    const titleEl = document.getElementById('selected-date-title');
+    if (titleEl?.textContent?.startsWith('Notes for ')) {
+        showNotesForDay(titleEl.textContent.replace('Notes for ', '').trim());
+    }
+    haptic([15, 30]);
+
+    let undone = false;
+    showUndoToast('Note deleted', () => {
+        undone = true;
+        const current = getLocalNotes();
+        current.push(deletedNote);
+        setLocalNotes(current);
+        renderAll();
+        // Restore the note back into the day view
+        if (titleEl?.textContent?.startsWith('Notes for ')) {
+            showNotesForDay(titleEl.textContent.replace('Notes for ', '').trim());
+        }
+        showToast('Restored ↺');
+    }, 5000);
+
+    // After undo window: permanently tombstone so Drive sync propagates deletion
+    setTimeout(() => {
+        if (!undone) {
+            const delSet = new Set(getDeletedIds());
+            delSet.add(safeId);
+            setDeletedIds(Array.from(delSet));
+            markDirty();
+        }
+    }, 5200);
 }
 
 export function toggleDarkMode() {

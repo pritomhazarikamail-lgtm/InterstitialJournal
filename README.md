@@ -16,6 +16,9 @@ Most journaling systems ask you to reflect once a day. Interstitial journaling f
 
 ### ✍️ Write
 - **Quick capture** — focused textarea with a 5,000-character limit and live counter
+- **Auto-save draft** — your in-progress note is saved on every keystroke and restored on reload; accidental refreshes never lose work
+- **Voice to text** — tap 🎤 to dictate; transcribed text appends to the textarea (button hidden automatically on browsers without Web Speech API support)
+- **Distraction-free mode** — tap "Focus" to hide everything except the textarea; tap again or press Esc to return
 - **Slash commands** — type `/` to insert structured entries:
   - `/win` — log a win or achievement
   - `/todo` — add a checkbox task (tap `☐` on any saved todo to mark it done)
@@ -27,7 +30,14 @@ Most journaling systems ask you to reflect once a day. Interstitial journaling f
 - **#tag support** — any `#hashtag` in your note is extracted and indexed automatically
 - **Next Up field** — set your next task before saving; it becomes the placeholder for your next entry, keeping your train of thought
 - **Recent strip** — the last 3 entries shown on the write page so you always have context
-- **Daily intention** — on the first open of each day, a banner prompts *"What's the one thing that would make today a win?"* The answer is saved as a `#intention #focus` note and pre-loaded into the Next Up field as a day-long anchor. Tap Skip to dismiss without saving.
+
+### 🎯 Daily Intention
+- On the first open of each day, a banner prompts *"What's the one thing that would make today a win?"*
+- The answer is saved as a `#intention #focus` note and pre-loaded into the Next Up field
+- A **persistent anchor strip** stays visible in the write page all day — `Today's goal  [your text]  [✓ Done]` — so you never lose sight of what you're working toward
+- Tap **✓ Done** to save a `✅ Achieved today's intention #achieved #intention` note with a timestamp, marking exactly when you completed it
+- The intention text and achieved state survive page reloads and sync across devices via Google Drive
+- Tap Skip on the banner to dismiss without saving
 
 ### 🔔 Check-in Reminders
 - Configurable nudge interval: **15 min**, **30 min**, or **1 hour** (off by default)
@@ -37,22 +47,34 @@ Most journaling systems ask you to reflect once a day. Interstitial journaling f
 
 ### 📅 History
 - **Calendar heatmap** — colour-coded grid showing days by entry volume (4 intensity levels)
-- **Day digest** — when you open any day, a stats bar shows entry count, total tracked time, and top tags at a glance (e.g. `7 entries · 3h 20m tracked · #focus ×3 · #win ×2`)
+- **Jump to Today** — "Today" button in the history header snaps the calendar to the current month and opens today's notes in one tap
+- **Journal streak badge** — shows your current consecutive-day journaling streak (🔥 N-day streak) next to the month header
+- **Day digest** — when you open any day, a stats bar shows entry count, total tracked time, word count, and top tags at a glance (e.g. `7 entries · 3h 20m tracked · 142 words · #focus ×3 · #win ×2`)
+- **Weekly digest** — tap 📊 to open a bottom-sheet with a per-day bar chart, total entries, total words, and top 5 tags for the current ISO week
 - **Timeline view** — entries shown chronologically with time-gap badges between them (e.g. "⏱️ 42m gap")
-- **Pinned entries** — pin important notes to float them to the top of any day's view; they also appear in their real chronological position in the timeline below, so gap times always reflect actual elapsed time
+- **Note type color accents** — a left border highlights each note's type at a glance: green for wins/done, blue for todos, red for blockers, amber for handoffs, accent for focus, purple for ideas
+- **Expand / collapse long notes** — notes longer than 300 characters are collapsed to 4 lines with a "Show more" toggle
+- **Pinned entries** — pin important notes to float them to the top of any day's view; they also appear in their real chronological position in the timeline so gap times are always accurate
 - **Tag cloud** — all tags sorted by frequency, with a two-row cap and overflow popover
 - **Full-text search** — debounced, with highlighted matches
 - **Tag filter** — tap any tag to filter all notes with that tag; notes show full pin/edit/delete actions
-- **Date range filter** — filter the timeline to any custom date range using the date pickers above the calendar
+- **Date range filter** — filter the timeline to any custom date range
+- **Keyboard navigation** — use ↑/↓ arrow keys to move between note cards when not in an input field
 
 ### ✅ Todo Completion
-- Any note card starting with `☐` renders the checkbox as a tappable button
-- Tapping it creates a `✅ Done: [task] #done` completion note with the current timestamp
-- The original note is preserved — the completion note is the record of when it was finished
+- Any note starting with `☐` renders the checkbox as a tappable button
+- Tapping it saves a `✅ Done: [task] #done` completion note with the current timestamp
+- The checkbox disables immediately on first tap to prevent duplicate completions
+- The original note is preserved — the completion note is the record of when it finished
+
+### 🗑️ Swipe to Delete (with Undo)
+- Swipe any note card left to delete it instantly; the day view updates immediately
+- A 5-second **Undo** button appears in the toast — tap it to restore the note in place
+- If not undone, the deletion is tombstoned and propagated to Drive sync
 
 ### 🎯 Focus (Pomodoro)
 - **25/5/15 Pomodoro timer** — animated SVG ring, long break every 4 rounds
-- **Pause / Resume** — without losing your progress
+- **Pause / Resume** — without losing progress
 - **Auto-logging** — each completed round and session finish are saved as notes automatically
 - **Dopamine streak** — 3 completed focus sessions lights up the streak dots with a celebration
 
@@ -69,19 +91,23 @@ Most journaling systems ask you to reflect once a day. Interstitial journaling f
 - Syncs your journal to Google Drive `appDataFolder` — a private, app-sandboxed space no other app or person can access
 - **Last-writer-wins merge** for multi-device use
 - **Tombstone-based deletion** so deleted notes stay deleted across all devices
-- Silent background sync on tab focus and every 5 minutes when signed in
+- Syncs focus streak, daily intention (text + achieved state), and Next Up across devices
+- Silent background sync on tab focus and every 5 minutes when signed in; visibilitychange listener registered exactly once
 - OAuth token auto-refreshes 5 minutes before expiry — session stays alive indefinitely without prompting
-- **Offline indicator** — the Sync button shows `📵 Offline` when there is no network connection and restores automatically when connectivity returns
+- **Offline indicator** — the Sync button shows `📵 Offline` when disconnected and restores automatically
 
 ### 📦 Data Portability
 - **Export → JSON** — full machine-readable backup of all notes
 - **Export → Markdown** — human-readable, grouped by date with timestamps
 - **Export → Print / PDF** — browser print dialog with a clean `@media print` layout
-- **Import** — load a JSON backup; notes are **merged** with last-writer-wins strategy (same as Drive sync), so existing notes are never overwritten. A confirmation modal shows the note count before committing.
+- **Import** — load a JSON backup; notes are **merged** with last-writer-wins strategy, so existing notes are never overwritten. A confirmation modal shows the note count before committing.
 
 ### 🌙 Appearance
 - Dark mode by default
 - One-tap light/dark toggle; preference persisted across sessions
+- Smooth page transitions — pages fade and slide in when switching views
+- Staggered card entrance animations and press-feedback on buttons
+- Haptic feedback on save, delete, and pin (on supported devices)
 
 ---
 
@@ -107,15 +133,10 @@ index.html          ← HTML structure
 style.css           ← All styles
 app.js              ← Orchestrator (imports from modules/)
 manifest.json       ← PWA metadata
-sw.js               ← Service worker (offline caching, v21)
-modules/            ← Feature modules (storage, crud, drive, ai, …)
-icon-512.webp       ← App icon (512 px, WebP)
-icon-512.png        ← App icon (512 px, PNG fallback)
-icon-192.webp       ← App icon (192 px, WebP)
-icon-192.png        ← App icon (192 px, PNG — used for PWA maskable)
-icon-180.png        ← Apple touch icon (180 px)
-icon-152.png        ← Apple touch icon (152 px)
-icon-120.png        ← Apple touch icon (120 px)
+sw.js               ← Service worker (offline caching, v23)
+modules/            ← Feature modules
+icon-512.webp / icon-512.png / icon-192.webp / icon-192.png
+icon-180.png / icon-152.png / icon-120.png
 ```
 
 Clone and serve from any static host:
@@ -140,9 +161,10 @@ python3 -m http.server 8080
 | `Ctrl + Enter` / `⌘ + Enter` | Save note |
 | `Enter` | Submit daily intention |
 | `/` at start of line | Open slash command menu |
-| `↑` / `↓` | Navigate slash command menu |
+| `↑` / `↓` in slash menu | Navigate slash command options |
+| `↑` / `↓` in day view | Navigate between note cards |
 | `Enter` or `Tab` | Apply selected slash command |
-| `Escape` | Close slash command menu / modal / intention banner |
+| `Escape` | Close slash menu / modal / intention banner / focus mode |
 
 ---
 
@@ -164,33 +186,31 @@ python3 -m http.server 8080
 ```
 InterstitialJournal/
 ├── index.html           # App shell — HTML structure only
-├── style.css            # All styles, 26 labelled sections
+├── style.css            # All styles, 36 labelled sections
 ├── app.js               # Thin orchestrator — slash commands, event wiring, init
 ├── modules/
 │   ├── state.js         # Shared UI filter state (uiState)
 │   ├── storage.js       # Security helpers, notes cache, date/tag indices
 │   ├── modal.js         # Custom modal (replaces prompt/confirm)
-│   ├── toast.js         # Ephemeral toast notifications
+│   ├── toast.js         # Ephemeral toasts + Undo toast (showUndoToast)
 │   ├── timer.js         # Live clock + "time since last entry" nudge
 │   ├── write.js         # Next Up field + Recent strip
+│   ├── draft.js         # Auto-save textarea draft between sessions
 │   ├── drive.js         # Google Drive sync + offline indicator
 │   ├── calendar.js      # Calendar heatmap, day timeline, day digest, note cards, tag cloud
-│   ├── crud.js          # saveNote, editNote, deleteNote, pinNote, completeTodo, toggleDarkMode
+│   ├── crud.js          # saveNote, editNote, deleteNote, pinNote, completeTodo, swipeDeleteNote, toggleDarkMode
 │   ├── pomodoro.js      # Focus timer, Pomodoro cycle, streak UI
 │   ├── ai.js            # On-device AI summary via WebLLM
 │   ├── search.js        # Full-text search, tag filter, date range filter
 │   ├── nav.js           # Page navigation, export/import
 │   ├── reminders.js     # Periodic check-in notifications
-│   └── intention.js     # Once-per-day morning intention banner
+│   ├── intention.js     # Once-per-day intention banner + persistent anchor + achieved tracking
+│   ├── haptic.js        # Haptic feedback wrapper (navigator.vibrate)
+│   ├── voice.js         # Voice-to-text via Web Speech API
+│   └── weekly.js        # Weekly digest modal (bar chart + stats)
 ├── manifest.json        # PWA manifest
-├── sw.js                # Service worker v21 (pre-caches all shell assets)
-├── icon-512.webp
-├── icon-512.png
-├── icon-192.webp
-├── icon-192.png
-├── icon-180.png
-├── icon-152.png
-└── icon-120.png
+├── sw.js                # Service worker v23 (pre-caches all shell assets)
+└── icon-*.webp / *.png  # App icons (512, 192, 180, 152, 120 px)
 ```
 
 ### `modules/` dependency tree
@@ -200,27 +220,25 @@ state.js          (no deps)
 storage.js        (no deps)
 modal.js          (no deps)
 toast.js          (no deps)
+haptic.js         (no deps)
 timer.js          ← storage
 write.js          ← storage
+draft.js          ← (DOM only — no module deps)
+voice.js          ← (DOM only — no module deps)
 calendar.js       ← storage, state          (fires custom DOM events instead of importing crud/search)
+weekly.js         ← storage, calendar
 drive.js          ← storage, toast, calendar, pomodoro
 search.js         ← storage, state, calendar
-crud.js           ← storage, modal, toast, drive, calendar, write, timer
+crud.js           ← storage, modal, toast, haptic, drive, calendar, write, timer
 pomodoro.js       ← toast, modal, crud, drive, timer
 reminders.js      ← toast
 intention.js      ← crud, write, storage, toast
 ai.js             ← storage                 (dynamic import of WebLLM)
 nav.js            ← storage, state, calendar, write, toast, modal
-app.js            ← all modules             (routes note-pin/edit/delete/complete/tag-filter events)
+app.js            ← all modules             (routes note-pin/edit/delete/complete/swipe-delete/tag-filter events)
 ```
 
-Circular dependencies are broken with custom DOM events: `buildNoteCard` in `calendar.js` fires `note-pin`, `note-edit`, `note-delete`, `note-complete`, and `tag-filter` events on `document` rather than importing `crud.js` or `search.js`. `app.js` listens for these and calls the appropriate functions.
-
-### `style.css` sections
-
-1–18: Design Tokens, Base, Layout, Cards & Timeline, Form Elements, Buttons, Tags & Tag Cloud, Search, Calendar, Home Header, Recent Strip, Focus Card & Pomodoro Ring, Modal, Toast, AI Summary, Slash Command Dropdown, Next Up Field, Misc/Utilities
-
-19–26: Pinned Entries, Export Dropdown, Date Range Filter, Print/PDF (`@media print`), Daily Intention Banner, Check-in Reminder Row, Day Digest Stats Bar, Todo Completion Checkbox
+Circular dependencies are broken with custom DOM events: `buildNoteCard` fires `note-pin`, `note-edit`, `note-delete`, `note-complete`, `note-swipe-delete`, and `tag-filter` on `document`. `app.js` listens for all of these and routes them to the appropriate functions.
 
 ---
 
@@ -231,6 +249,8 @@ Circular dependencies are broken with custom DOM events: `buildNoteCard` in `cal
 | Core journaling | ✅ | ✅ | ✅ |
 | PWA install | ✅ | ✅ | ✅ iOS 16.4+ |
 | Check-in reminders | ✅ | ✅ | ✅ |
+| Voice to text | ✅ | ❌ | ✅ |
+| Haptic feedback | ✅ Android | ❌ | ❌ |
 | AI Summary | ✅ WebGPU | ❌ no WebGPU yet | ✅ macOS 14+ |
 | Offline | ✅ | ✅ | ✅ |
 | Google Drive Sync | ✅ | ✅ | ✅ |

@@ -152,6 +152,13 @@
             </div>
         </div>
 
+        <!-- Persistent today's intention anchor (visible all day once set) -->
+        <div id="intention-anchor" class="hidden">
+            <span class="intention-anchor-label">Today's goal</span>
+            <span id="intention-anchor-text"></span>
+            <button id="intention-anchor-done" class="intention-anchor-done-btn" aria-label="Mark intention as achieved" title="Mark as achieved">✓ Done</button>
+        </div>
+
         <!-- Active focus / Pomodoro card (hidden when idle) -->
         <div id="focus-section" class="hidden">
             <div class="focus-card" id="focus-card" style="margin-bottom:24px;">
@@ -186,14 +193,18 @@
         <h1 class="section-header">How's it going?</h1>
 
         <!-- Note input -->
-        <div style="position:relative;">
+        <div id="note-input-wrap" style="position:relative;">
             <textarea id="note-input"
                       placeholder="What are you working on? Use #tags or type / for commands..."
                       maxlength="5000"
                       aria-label="Journal note"></textarea>
             <div id="slash-dropdown" style="display:none;" role="listbox" aria-label="Slash commands"></div>
+            <button id="voice-btn" class="voice-btn" aria-label="Voice input" title="Voice input">🎤</button>
         </div>
-        <div id="char-counter">0 / 5000</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div id="char-counter">0 / 5000</div>
+            <button id="focus-mode-btn" class="focus-mode-btn" aria-label="Distraction-free writing mode" title="Focus mode">⛶ Focus</button>
+        </div>
 
         <!-- Next Up field -->
         <div id="next-up-wrap">
@@ -205,7 +216,7 @@
         </div>
 
         <!-- Action buttons -->
-        <div style="display:flex;gap:10px;width:100%;margin-top:2px;">
+        <div id="note-actions-row" style="display:flex;gap:10px;width:100%;margin-top:2px;">
             <button class="primary-btn" id="save-btn" style="flex:1;">&#128190; Save Note</button>
             <button class="primary-btn" id="focus-btn"
                     style="flex:1;background:var(--surface2);color:var(--accent);border:1.5px solid var(--accent);box-shadow:none;">
@@ -241,9 +252,20 @@
 
         <!-- Month navigation -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;">
-            <h2 id="month-display"
-                style="margin:0;font-family:'Instrument Serif',serif;font-size:1.5rem;font-weight:400;"></h2>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <h2 id="month-display"
+                    style="margin:0;font-family:'Instrument Serif',serif;font-size:1.5rem;font-weight:400;"></h2>
+                <span id="journal-streak-badge" class="journal-streak-badge" style="display:none;"></span>
+            </div>
             <div style="display:flex;gap:6px;">
+                <button id="today-btn" aria-label="Jump to today"
+                        style="padding:7px 13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);
+                               background:var(--card-bg);color:var(--accent);cursor:pointer;
+                               font-family:'DM Sans',sans-serif;font-size:0.85rem;font-weight:600;transition:border-color 0.2s;">Today</button>
+                <button id="weekly-btn" aria-label="Weekly digest"
+                        style="padding:7px 13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);
+                               background:var(--card-bg);color:var(--text);cursor:pointer;
+                               font-family:'DM Sans',sans-serif;font-size:0.85rem;transition:border-color 0.2s;">📊</button>
                 <button id="prev-month-btn" aria-label="Previous month"
                         style="padding:7px 13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);
                                background:var(--card-bg);color:var(--text);cursor:pointer;
@@ -372,6 +394,19 @@
     </nav>
 
 </div><!-- /.container -->
+
+<!-- ═══════════════════════════════════════════════════
+     WEEKLY DIGEST OVERLAY
+     ═══════════════════════════════════════════════════ -->
+<div id="weekly-overlay" class="hidden" role="dialog" aria-modal="true" aria-label="Weekly digest">
+    <div id="weekly-modal">
+        <div class="weekly-modal-header">
+            <span>📊 This Week</span>
+            <button id="weekly-overlay-close" aria-label="Close weekly digest">✕</button>
+        </div>
+        <div id="weekly-content"></div>
+    </div>
+</div>
 
 <!-- App logic — type="module" for ES module scoping -->
 <script type="module" src="app.js"></script>

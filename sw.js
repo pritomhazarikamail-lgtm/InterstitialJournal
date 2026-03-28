@@ -24,7 +24,7 @@
  *    the current one.
  * ============================================================ */
 
-const CACHE_VERSION = 'journal-v21';
+const CACHE_VERSION = 'journal-v23';
 
 const SHELL_ASSETS = [
     './',
@@ -47,6 +47,10 @@ const SHELL_ASSETS = [
     './modules/nav.js',
     './modules/reminders.js',
     './modules/intention.js',
+    './modules/draft.js',
+    './modules/haptic.js',
+    './modules/voice.js',
+    './modules/weekly.js',
     './icon-192.webp',
     './icon-192.png',
     './icon-512.png',

@@ -31,18 +31,23 @@ export function showPage(pageId) {
 
 /* ── Export ─────────────────────────────────────────────────────────────────── */
 
+let _exportMenuAC = null;
 export function toggleExportMenu() {
     const menu = document.getElementById('export-menu');
     menu.classList.toggle('hidden');
     if (!menu.classList.contains('hidden')) {
+        _exportMenuAC?.abort();
+        _exportMenuAC = new AbortController();
         setTimeout(() => {
-            document.addEventListener('click', function closeMenu(e) {
+            document.addEventListener('click', e => {
                 if (!document.getElementById('export-menu-wrap')?.contains(e.target)) {
                     menu.classList.add('hidden');
-                    document.removeEventListener('click', closeMenu);
+                    _exportMenuAC?.abort();
                 }
-            });
+            }, { signal: _exportMenuAC.signal });
         }, 0);
+    } else {
+        _exportMenuAC?.abort();
     }
 }
 

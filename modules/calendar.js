@@ -49,6 +49,14 @@ export function renderCalendar() {
         btn.addEventListener('click', () => showNotesForDay(key));
         cal.appendChild(btn);
     }
+
+    // Journal streak badge
+    const badge = document.getElementById('journal-streak-badge');
+    if (badge) {
+        const s = _getJournalStreak();
+        badge.textContent     = s > 1 ? `🔥 ${s}-day streak` : '';
+        badge.style.display   = s > 1 ? 'inline-block' : 'none';
+    }
 }
 
 /* ── Note card builder ─────────────────────────────────────────────────────── */
@@ -59,8 +67,41 @@ export function renderCalendar() {
  * functions directly, which would create a circular import with crud.js.
  */
 export function buildNoteCard(n, showDate = false) {
-    const card = document.createElement('div');
-    card.className = `note-item${n.pinned ? ' note-item--pinned' : ''}`;
+    const card     = document.createElement('div');
+    const noteType = n.content.startsWith('🏆') || n.content.startsWith('✅') ? 'note-type-win'
+        : n.content.startsWith('☐') ? 'note-type-todo'
+        : n.content.startsWith('🚫') ? 'note-type-block'
+        : n.content.startsWith('🔄') ? 'note-type-handoff'
+        : n.content.startsWith('🎯') ? 'note-type-focus'
+        : n.content.startsWith('💡') ? 'note-type-idea'
+        : '';
+    card.className = `note-item${n.pinned ? ' note-item--pinned' : ''}${noteType ? ' ' + noteType : ''}`;
+    card.setAttribute('tabindex', '-1');
+
+    // ── Swipe-left to delete (event handled in app.js → swipeDeleteNote) ──
+    let _touchStartX = null;
+    card.addEventListener('touchstart', e => {
+        _touchStartX = e.touches[0].clientX;
+        card.style.transition = 'none';
+    }, { passive: true });
+    card.addEventListener('touchmove', e => {
+        if (_touchStartX === null) return;
+        const dx = e.touches[0].clientX - _touchStartX;
+        if (dx < -5) card.style.transform = `translateX(${Math.max(dx, -110)}px)`;
+    }, { passive: true });
+    card.addEventListener('touchend', e => {
+        if (_touchStartX === null) return;
+        const dx = e.changedTouches[0].clientX - _touchStartX;
+        _touchStartX = null;
+        card.style.transition = '';
+        if (dx < -60) {
+            card.style.transform = 'translateX(-110%)';
+            card.style.opacity   = '0';
+            document.dispatchEvent(new CustomEvent('note-swipe-delete', { detail: { id: n.id } }));
+        } else {
+            card.style.transform = '';
+        }
+    }, { passive: true });
 
     const header = document.createElement('div');
     header.className = 'note-card-header';
@@ -79,7 +120,7 @@ export function buildNoteCard(n, showDate = false) {
     card.appendChild(header);
 
     const contentDiv = document.createElement('div');
-    contentDiv.style.cssText = 'margin:10px 0;font-size:1.05rem;';
+    contentDiv.className = 'note-content';
     n.content.split('\n').forEach((line, li) => {
         if (li > 0) contentDiv.appendChild(document.createElement('br'));
         // First line of a todo note gets a tappable checkbox
@@ -90,6 +131,8 @@ export function buildNoteCard(n, showDate = false) {
             cb.setAttribute('aria-label', 'Mark as done');
             cb.addEventListener('click', e => {
                 e.stopPropagation();
+                if (cb.disabled) return;
+                cb.disabled = true;
                 document.dispatchEvent(new CustomEvent('note-complete', { detail: { id: n.id } }));
             });
             contentDiv.appendChild(cb);
@@ -99,6 +142,20 @@ export function buildNoteCard(n, showDate = false) {
         }
     });
     card.appendChild(contentDiv);
+
+    // Collapse notes longer than 300 chars with a "Show more" toggle
+    if (n.content.length > 300) {
+        contentDiv.classList.add('note-content--collapsible', 'note-content--collapsed');
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className   = 'note-expand-btn';
+        toggleBtn.textContent = 'Show more';
+        toggleBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            const collapsed = contentDiv.classList.toggle('note-content--collapsed');
+            toggleBtn.textContent = collapsed ? 'Show more' : 'Show less';
+        });
+        card.appendChild(toggleBtn);
+    }
 
     const actions = document.createElement('div');
     actions.className = 'note-actions';
@@ -147,8 +204,12 @@ function renderDayDigest(dayNotes) {
         .map(([t, c]) => `${t} ×${c}`)
         .join(' · ');
 
+    const totalWords = dayNotes.reduce(
+        (s, n) => s + n.content.trim().split(/\s+/).filter(Boolean).length, 0
+    );
     const parts = [`${dayNotes.length} entr${dayNotes.length === 1 ? 'y' : 'ies'}`];
     if (dayNotes.length > 1) parts.push(`${formatDuration(trackedMs)} tracked`);
+    parts.push(`${totalWords} word${totalWords !== 1 ? 's' : ''}`);
     if (topTags) parts.push(topTags);
 
     el.textContent = parts.join('  ·  ');
@@ -210,6 +271,31 @@ export function showNotesForDay(dateKey) {
 
 export function renderAll()    { renderTagCloud(); renderCalendar(); }
 export function changeMonth(d) { uiState.currentMonth.setMonth(uiState.currentMonth.getMonth() + d); renderCalendar(); }
+
+/** Navigate calendar to today and open today's notes. */
+export function jumpToToday() {
+    const now  = new Date();
+    uiState.currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const key  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    renderCalendar();
+    showNotesForDay(key);
+}
+
+/** Count consecutive days (ending today or yesterday) with ≥1 note. */
+function _getJournalStreak() {
+    const dateIdx   = getDateIndex();
+    const today     = new Date();
+    const toKey     = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const todayKey  = toKey(today);
+    const todayFull = (dateIdx.get(todayKey) || []).length > 0;
+    let streak = 0;
+    for (let i = todayFull ? 0 : 1; i < 365; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        if ((dateIdx.get(toKey(d)) || []).length > 0) { streak++; } else { break; }
+    }
+    return streak;
+}
 
 /* ── Tag cloud ─────────────────────────────────────────────────────────────── */
 

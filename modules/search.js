@@ -30,11 +30,10 @@ export function searchNotes() {
     list.innerHTML = '';
     filtered.forEach(n => {
         const card = buildNoteCard(n, true);
-        const divs = card.querySelectorAll('div');
-        const contentDiv = Array.from(divs).find(d => d.style.margin);
+        const contentDiv = card.querySelector('.note-content');
         if (contentDiv) {
             const newDiv = document.createElement('div');
-            newDiv.style.cssText = 'margin:10px 0;font-size:1.05rem;';
+            newDiv.className = 'note-content';
             const lower = n.content.toLowerCase();
             let last = 0, pos;
             // SECURITY: DOM highlight — never innerHTML

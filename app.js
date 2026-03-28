@@ -22,18 +22,21 @@
  * and the init() entry point.
  */
 
-import { saveNote, editNote, deleteNote, pinNote, toggleDarkMode, completeTodo } from './modules/crud.js';
+import { saveNote, editNote, deleteNote, pinNote, toggleDarkMode, completeTodo, swipeDeleteNote } from './modules/crud.js';
 import { initGIS, handleAuthClick, initOfflineIndicator } from './modules/drive.js';
 import { initReminders } from './modules/reminders.js';
 import { initIntention }  from './modules/intention.js';
 import { renderFocus, startFocus, completeFocus, abandonFocus, pomoPauseResume, updateStreakUI } from './modules/pomodoro.js';
-import { changeMonth, openTagOverflow, closeTagOverflow, clearDateRange, restoreCalendarState } from './modules/calendar.js';
+import { changeMonth, openTagOverflow, closeTagOverflow, clearDateRange, restoreCalendarState, jumpToToday } from './modules/calendar.js';
 import { generateDailySummary, initModelSelect } from './modules/ai.js';
 import { searchNotes, filterByTag, filterByDateRange } from './modules/search.js';
 import { showPage, toggleExportMenu, exportJSON, exportMarkdown, exportPrint, importNotes } from './modules/nav.js';
 import { updateLiveClock, updateLiveTimer } from './modules/timer.js';
 import { initNextUp, renderRecentStrip as renderRecentStripWrite, setNextUp, clearNextUp } from './modules/write.js';
 import { showToast } from './modules/toast.js';
+import { initDraft }  from './modules/draft.js';
+import { initVoice }  from './modules/voice.js';
+import { showWeeklyDigest, hideWeeklyDigest } from './modules/weekly.js';
 
 /* =============================================================================
  * SLASH COMMANDS
@@ -167,11 +170,12 @@ document.addEventListener('click', e => {
  * which would create circular dependencies.
  * ============================================================================= */
 
-document.addEventListener('note-pin',      e => pinNote(e.detail.id));
-document.addEventListener('note-edit',     e => editNote(e.detail.id));
-document.addEventListener('note-delete',   e => deleteNote(e.detail.id));
-document.addEventListener('note-complete', e => completeTodo(e.detail.id));
-document.addEventListener('tag-filter',    e => filterByTag(e.detail.tag));
+document.addEventListener('note-pin',          e => pinNote(e.detail.id));
+document.addEventListener('note-edit',         e => editNote(e.detail.id));
+document.addEventListener('note-delete',       e => deleteNote(e.detail.id));
+document.addEventListener('note-complete',     e => completeTodo(e.detail.id));
+document.addEventListener('tag-filter',        e => filterByTag(e.detail.tag));
+document.addEventListener('note-swipe-delete', e => swipeDeleteNote(e.detail.id));
 
 /* =============================================================================
  * EVENT WIRING
@@ -231,6 +235,62 @@ document.getElementById('search-input').addEventListener('input', () => {
 });
 
 document.getElementById('summarize-btn').addEventListener('click', generateDailySummary);
+
+// Jump to today
+document.getElementById('today-btn')?.addEventListener('click', () => {
+    showPage('history-page');
+    jumpToToday();
+});
+
+// Weekly digest modal
+document.getElementById('weekly-btn')?.addEventListener('click', showWeeklyDigest);
+document.getElementById('weekly-overlay-close')?.addEventListener('click', hideWeeklyDigest);
+document.getElementById('weekly-overlay')?.addEventListener('click', e => {
+    if (e.target === document.getElementById('weekly-overlay')) hideWeeklyDigest();
+});
+
+// Distraction-free focus mode — button toggles; Esc also exits
+(function initFocusMode() {
+    const btn       = document.getElementById('focus-mode-btn');
+    const noteInput = document.getElementById('note-input');
+    if (!btn) return;
+
+    function enterFocus() {
+        document.body.classList.add('focus-mode');
+        btn.textContent = '✕ Exit focus';
+        btn.classList.add('focus-mode-btn--active');
+        noteInput?.focus();
+    }
+    function exitFocus() {
+        document.body.classList.remove('focus-mode');
+        btn.textContent = '⛶ Focus';
+        btn.classList.remove('focus-mode-btn--active');
+    }
+
+    btn.addEventListener('click', () => {
+        document.body.classList.contains('focus-mode') ? exitFocus() : enterFocus();
+    });
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && document.body.classList.contains('focus-mode')) exitFocus();
+    });
+})();
+
+// Keyboard navigation in day-view note list (↑ / ↓)
+document.addEventListener('keydown', e => {
+    if (!['ArrowDown', 'ArrowUp'].includes(e.key)) return;
+    if (document.activeElement?.matches('input, textarea, select')) return;
+    if (document.getElementById('history-page')?.classList.contains('hidden')) return;
+    const cards = Array.from(document.getElementById('notes-list')?.querySelectorAll('.note-item') ?? []);
+    if (!cards.length) return;
+    e.preventDefault();
+    const idx  = cards.indexOf(document.activeElement);
+    const next = e.key === 'ArrowDown'
+        ? cards[(idx + 1) % cards.length]
+        : cards[(idx - 1 + cards.length) % cards.length];
+    next.setAttribute('tabindex', '0');
+    next.focus();
+});
 
 // Next Up input
 const nextUpInput = document.getElementById('next-up-input');
@@ -304,6 +364,8 @@ document.getElementById('install-dismiss')?.addEventListener('click', () => {
 
     updateStreakUI();
     initNextUp();
+    initDraft();
+    initVoice();
     initModelSelect();
     initReminders();
     initIntention();
