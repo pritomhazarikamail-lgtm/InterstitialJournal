@@ -33,7 +33,7 @@
     "google_drive_v3": {
       "base_url": "https://www.googleapis.com/drive/v3",
       "scope": "https://www.googleapis.com/auth/drive.appdata",
-      "purpose": "Optional cloud sync — stores journal_data.json in a private, app-sandboxed Drive folder.",
+      "purpose": "Optional cloud sync — stores journal_data.json in a private, app-sandboxed Drive folder. Writes are decoupled from CRUD (fire-and-forget via markDirty). driveFileId persisted in localStorage to avoid list calls on reload.",
       "used_in": "modules/drive.js"
     },
     "google_oauth": {

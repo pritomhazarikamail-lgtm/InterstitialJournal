@@ -1,5 +1,10 @@
 /**
  * modules/crud.js — Note CRUD operations and theme toggle
+ *
+ * Sync is intentionally decoupled: after any write we call markDirty()
+ * and return immediately. drive.js flushes the upload in the background
+ * after a 2-second debounce. If the user is not signed in, markDirty()
+ * is a no-op with zero overhead.
  */
 
 import {
@@ -8,7 +13,7 @@ import {
 } from './storage.js';
 import { showModal }  from './modal.js';
 import { showToast }  from './toast.js';
-import { uploadToDrive } from './drive.js';
+import { markDirty }  from './drive.js';
 import { renderAll, showNotesForDay } from './calendar.js';
 import { renderRecentStrip } from './write.js';
 import { updateLiveTimer } from './timer.js';
@@ -39,7 +44,6 @@ export async function saveNote(manualText = null) {
         noteInput.value = '';
         charCounter.textContent = '0 / 5000';
         charCounter.classList.remove('warn');
-        // Hide slash dropdown via custom event (slash commands live in app.js)
         document.dispatchEvent(new CustomEvent('hide-slash-dropdown'));
 
         if (nextUp) {
@@ -54,7 +58,7 @@ export async function saveNote(manualText = null) {
     }
 
     updateLiveTimer();
-    await uploadToDrive();
+    markDirty();
     showToast('Note saved ✓');
 }
 
@@ -74,7 +78,7 @@ export async function editNote(id) {
     notes[idx].tags      = (newText.match(/#(\w+)/g) || []).map(t => t.toLowerCase());
     setLocalNotes(notes);
     showNotesForDay(notes[idx].dateKey);
-    await uploadToDrive();
+    markDirty();
 }
 
 export async function deleteNote(id) {
@@ -97,7 +101,7 @@ export async function deleteNote(id) {
     document.getElementById('notes-list').innerHTML = '';
     document.getElementById('selected-date-title').textContent = '';
     document.getElementById('llm-controls').style.display = 'none';
-    await uploadToDrive();
+    markDirty();
     showToast('Note deleted');
 }
 
@@ -110,7 +114,7 @@ export async function pinNote(id) {
     notes[idx].pinned = !notes[idx].pinned;
     setLocalNotes(notes);
     showNotesForDay(notes[idx].dateKey);
-    await uploadToDrive();
+    markDirty();
     showToast(notes[idx].pinned ? '📌 Pinned' : 'Unpinned');
 }
 
