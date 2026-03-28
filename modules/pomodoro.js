@@ -12,6 +12,7 @@
 import { showToast }  from './toast.js';
 import { showModal }  from './modal.js';
 import { saveNote }   from './crud.js';
+import { markDirty }  from './drive.js';
 import { updateLiveTimer } from './timer.js';
 
 const POMO_WORK_SECS  = 25 * 60;
@@ -242,6 +243,7 @@ export async function completeFocus() {
     const totalMins = s.sessStart ? Math.round((Date.now() - s.sessStart) / 60000) : 0;
     await saveNote(`✅ Finished: ${s.goal} (#focus #pomodoro — ${s.rounds} 🍅, ${totalMins}m)`);
     localStorage.setItem('focus_streak', String(parseInt(localStorage.getItem('focus_streak') || '0', 10) + 1));
+    markDirty(); // sync streak to Drive so other devices see it
     pomoClearState();
     renderFocus();
     updateStreakUI();

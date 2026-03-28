@@ -24,6 +24,7 @@ import {
 } from './storage.js';
 import { showToast } from './toast.js';
 import { renderAll, showNotesForDay } from './calendar.js';
+import { updateStreakUI } from './pomodoro.js';
 
 const CLIENT_ID         = '629370111704-m36nu5qgi52071qgp0sfsbs5sa9ac80k.apps.googleusercontent.com';
 const SCOPES            = 'https://www.googleapis.com/auth/drive.appdata';
@@ -254,7 +255,8 @@ export async function uploadToDrive() {
         }
     }
 
-    const payload  = JSON.stringify({ notes: getLocalNotes(), deletedIds: getDeletedIds() });
+    const focusStreak = parseInt(localStorage.getItem('focus_streak') || '0', 10);
+    const payload  = JSON.stringify({ notes: getLocalNotes(), deletedIds: getDeletedIds(), focusStreak });
     const metadata = driveFileId ? {} : { name: 'journal_data.json', parents: ['appDataFolder'] };
     const boundary = 'journal_sync_v1';
     const body =
@@ -284,6 +286,14 @@ export async function uploadToDrive() {
 export function mergeNotes(driveData) {
     const rawDriveNotes   = Array.isArray(driveData) ? driveData : (driveData?.notes ?? []);
     const rawDriveDeleted = Array.isArray(driveData) ? [] : (driveData?.deletedIds ?? []);
+
+    // Merge focus streak — take the higher of local vs Drive (never lose progress)
+    if (typeof driveData?.focusStreak === 'number') {
+        const local  = parseInt(localStorage.getItem('focus_streak') || '0', 10);
+        const merged = Math.max(local, driveData.focusStreak);
+        localStorage.setItem('focus_streak', String(merged));
+        updateStreakUI();
+    }
 
     const driveNotes   = rawDriveNotes.map(validateNote).filter(Boolean);
     const driveDeleted = rawDriveDeleted.map(sanitiseId).filter(Boolean);
