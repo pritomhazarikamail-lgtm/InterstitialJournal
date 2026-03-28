@@ -5,8 +5,11 @@
  * No manual WASM/ONNX wrangling needed — works on any WebGPU device.
  */
 
-let _engine      = null;
-let _loadedModel = null;
+// Map<modelId, MLCEngine> — keeps every loaded engine alive for the session.
+// Switching models and switching back never re-initialises the engine.
+// WebLLM persists the model weights in IndexedDB, so they are never
+// re-downloaded after the first load.
+const _engines = new Map();
 
 function yieldToMain() {
     if (typeof scheduler !== 'undefined' && scheduler.yield) return scheduler.yield();
@@ -29,17 +32,17 @@ function hideDlProgress() {
 }
 
 async function loadEngine(modelId) {
-    if (_engine && _loadedModel === modelId) return _engine;
+    if (_engines.has(modelId)) return _engines.get(modelId);
     const webllm = await import('https://esm.run/@mlc-ai/web-llm');
     if (!navigator.gpu) throw new Error('WebGPU is not supported on this browser/device.');
-    _engine = await webllm.CreateMLCEngine(modelId, {
+    const engine = await webllm.CreateMLCEngine(modelId, {
         initProgressCallback: report => {
             const pct = report.progress != null ? Math.round(report.progress * 100) : null;
             setDlProgress(report.text || 'Loading...', pct);
         },
     });
-    _loadedModel = modelId;
-    return _engine;
+    _engines.set(modelId, engine);
+    return engine;
 }
 
 export async function generateDailySummary() {
@@ -193,11 +196,14 @@ function renderSummary(data, container) {
 /* ── Model selector wiring (self-contained) ──────────────────────────────── */
 export function initModelSelect() {
     document.getElementById('model-select').addEventListener('change', function () {
-        const opt  = this.options[this.selectedIndex];
-        const size = opt.getAttribute('data-size') || '';
-        document.getElementById('model-dl-note').textContent = `⬇️ ${size} download once, then runs offline forever.`;
-        _engine = null;
-        _loadedModel = null;
+        const opt      = this.options[this.selectedIndex];
+        const size     = opt.getAttribute('data-size') || '';
+        const modelId  = this.value;
+        const isLoaded = _engines.has(modelId);
+        document.getElementById('model-dl-note').textContent = isLoaded
+            ? '✅ Model already loaded — no download needed.'
+            : `⬇️ ${size} download once, then runs offline forever.`;
+        // Clear previous summary output but keep engines in memory
         document.getElementById('daily-summary-output').innerHTML = '';
         document.getElementById('daily-summary-output').classList.remove('has-content');
         document.getElementById('llm-status').textContent = '';
