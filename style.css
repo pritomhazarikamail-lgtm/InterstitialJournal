@@ -1721,8 +1721,83 @@ body.focus-mode #note-input {
 /* Transition is already on the base .note-item rule (section 4 above) */
 
 /* ═══════════════════════════════════════════════════
-   34. JOURNAL STREAK BADGE
+   34. HISTORY HEADER
    ═══════════════════════════════════════════════════ */
+.history-header {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 22px;
+}
+
+/* Row 1: ‹ Month Year › */
+.history-nav-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.month-display {
+    margin: 0;
+    font-family: 'Instrument Serif', serif;
+    font-size: 1.5rem;
+    font-weight: 400;
+    flex: 1;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.month-nav-btn {
+    padding: 7px 14px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--border);
+    background: var(--card-bg);
+    color: var(--text);
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1rem;
+    line-height: 1;
+    transition: border-color 0.2s;
+    flex-shrink: 0;
+}
+.month-nav-btn:hover { border-color: var(--accent); }
+
+/* Row 2: streak badge + Today + 📊 */
+.history-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+}
+
+/* Push Today+📊 to the right, streak stays left */
+.history-actions-row .journal-streak-badge {
+    margin-right: auto;
+}
+
+.history-action-btn {
+    padding: 6px 13px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--border);
+    background: var(--card-bg);
+    color: var(--text);
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    transition: border-color 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.history-action-btn:hover { border-color: var(--accent); }
+.history-action-btn--accent {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* JOURNAL STREAK BADGE */
 .journal-streak-badge {
     display: inline-block;
     font-size: 0.72rem;

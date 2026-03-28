@@ -251,29 +251,16 @@
     <div id="history-page" class="hidden">
 
         <!-- Month navigation -->
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;">
-            <div style="display:flex;align-items:center;gap:10px;">
-                <h2 id="month-display"
-                    style="margin:0;font-family:'Instrument Serif',serif;font-size:1.5rem;font-weight:400;"></h2>
-                <span id="journal-streak-badge" class="journal-streak-badge" style="display:none;"></span>
+        <div class="history-header">
+            <div class="history-nav-row">
+                <button id="prev-month-btn" class="month-nav-btn" aria-label="Previous month">‹</button>
+                <h2 id="month-display" class="month-display"></h2>
+                <button id="next-month-btn" class="month-nav-btn" aria-label="Next month">›</button>
             </div>
-            <div style="display:flex;gap:6px;">
-                <button id="today-btn" aria-label="Jump to today"
-                        style="padding:7px 13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);
-                               background:var(--card-bg);color:var(--accent);cursor:pointer;
-                               font-family:'DM Sans',sans-serif;font-size:0.85rem;font-weight:600;transition:border-color 0.2s;">Today</button>
-                <button id="weekly-btn" aria-label="Weekly digest"
-                        style="padding:7px 13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);
-                               background:var(--card-bg);color:var(--text);cursor:pointer;
-                               font-family:'DM Sans',sans-serif;font-size:0.85rem;transition:border-color 0.2s;">📊</button>
-                <button id="prev-month-btn" aria-label="Previous month"
-                        style="padding:7px 13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);
-                               background:var(--card-bg);color:var(--text);cursor:pointer;
-                               font-family:'DM Sans',sans-serif;font-size:0.9rem;transition:border-color 0.2s;">‹</button>
-                <button id="next-month-btn" aria-label="Next month"
-                        style="padding:7px 13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);
-                               background:var(--card-bg);color:var(--text);cursor:pointer;
-                               font-family:'DM Sans',sans-serif;font-size:0.9rem;transition:border-color 0.2s;">›</button>
+            <div class="history-actions-row">
+                <span id="journal-streak-badge" class="journal-streak-badge" style="display:none;"></span>
+                <button id="today-btn" class="history-action-btn history-action-btn--accent" aria-label="Jump to today">Today</button>
+                <button id="weekly-btn" class="history-action-btn" aria-label="Weekly digest">📊</button>
             </div>
         </div>
 
