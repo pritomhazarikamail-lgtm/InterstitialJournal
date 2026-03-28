@@ -15,7 +15,7 @@ import { showModal }  from './modal.js';
 import { showToast }  from './toast.js';
 import { markDirty }  from './drive.js';
 import { renderAll, showNotesForDay } from './calendar.js';
-import { renderRecentStrip } from './write.js';
+import { renderRecentStrip, setNextUp, clearNextUp } from './write.js';
 import { updateLiveTimer } from './timer.js';
 
 export async function saveNote(manualText = null) {
@@ -48,11 +48,11 @@ export async function saveNote(manualText = null) {
 
         if (nextUp) {
             noteInput.placeholder = nextUp;
-            localStorage.setItem('next_up', nextUp.slice(0, 200));
+            setNextUp(nextUp);
             nextUpInput.value = '';
         } else {
             noteInput.placeholder = "What are you working on? Use #tags or type / for commands...";
-            localStorage.removeItem('next_up');
+            clearNextUp();
         }
         renderRecentStrip();
     }

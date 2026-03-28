@@ -5,6 +5,8 @@
  * No manual WASM/ONNX wrangling needed — works on any WebGPU device.
  */
 
+import { getDateIndex } from './storage.js';
+
 // Map<modelId, MLCEngine> — keeps every loaded engine alive for the session.
 // Switching models and switching back never re-initialises the engine.
 // WebLLM persists the model weights in IndexedDB, so they are never
@@ -57,10 +59,21 @@ export async function generateDailySummary() {
     output.classList.remove('has-content');
     output.innerHTML = '';
 
-    const noteTexts = Array.from(document.querySelectorAll('#notes-list .note-item')).map(card => {
-        const time = card.querySelector('small')?.textContent || '';
-        const body = card.querySelector('div')?.textContent   || '';
-        return `[${time}] ${body.trim()}`;
+    const titleEl  = document.getElementById('selected-date-title');
+    const dateMatch = titleEl.textContent.match(/Notes for (\d{4}-\d{2}-\d{2})/);
+    if (!dateMatch) {
+        status.textContent = 'Select a day from the calendar first.';
+        btn.disabled = false; btn.textContent = 'Summarize';
+        return;
+    }
+    const dateKey  = dateMatch[1];
+    const dayNotes = (getDateIndex().get(dateKey) || [])
+        .slice()
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    const noteTexts = dayNotes.map(n => {
+        const time = new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return `[${time}] ${n.content.trim()}`;
     }).filter(Boolean);
 
     if (noteTexts.length === 0) {

@@ -7,6 +7,7 @@ import { uiState } from './state.js';
 import { renderAll, clearTagActive, clearDateRange, restoreCalendarState } from './calendar.js';
 import { renderRecentStrip } from './write.js';
 import { showToast } from './toast.js';
+import { showModal } from './modal.js';
 
 export function showPage(pageId) {
     if (!['home-page', 'history-page'].includes(pageId)) return;
@@ -94,19 +95,35 @@ export function exportPrint() {
     window.print();
 }
 
-export function importNotes(e) {
+export async function importNotes(e) {
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 10_000_000) { showToast('File too large (max 10 MB)'); return; }
+
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = async ev => {
         const parsed = safeJSON(ev.target.result, null);
-        if (!Array.isArray(parsed)) { showToast('Invalid journal file'); return; }
-        const valid = parsed.map(validateNote).filter(Boolean);
-        if (valid.length === 0) { showToast('No valid notes found'); return; }
-        setLocalNotes(valid);
+        if (!Array.isArray(parsed)) { showToast('Invalid journal file'); e.target.value = ''; return; }
+        const incoming = parsed.map(validateNote).filter(Boolean);
+        if (incoming.length === 0) { showToast('No valid notes found'); e.target.value = ''; return; }
+
+        const confirmed = await showModal({
+            title:       'Import Notes',
+            message:     `Merge ${incoming.length} note${incoming.length !== 1 ? 's' : ''} into your journal? Existing notes are preserved — only newer versions overwrite older ones.`,
+            confirmText: 'Merge',
+        });
+        if (!confirmed) { e.target.value = ''; return; }
+
+        // Last-writer-wins merge (same strategy as Drive sync)
+        const existing = getLocalNotes();
+        const merged   = new Map(existing.map(n => [n.id, n]));
+        incoming.forEach(n => {
+            const ex = merged.get(n.id);
+            if (!ex || new Date(n.timestamp) > new Date(ex.timestamp)) merged.set(n.id, n);
+        });
+        setLocalNotes(Array.from(merged.values()));
         renderAll();
-        showToast(`Imported ${valid.length} notes ✓`);
+        showToast(`Merged ${incoming.length} note${incoming.length !== 1 ? 's' : ''} ✓`);
         e.target.value = '';
     };
     reader.onerror = () => showToast('Failed to read file');

@@ -9,9 +9,14 @@ const modalTextarea = document.getElementById('modal-textarea');
 const modalCancel   = document.getElementById('modal-cancel');
 const modalConfirm  = document.getElementById('modal-confirm');
 let _modalResolve   = null;
+let _prevFocus      = null;
 
-export function showModal({ title, message, defaultValue, isDanger = false }) {
+export function showModal({ title, message, defaultValue, isDanger = false, confirmText }) {
+    // If a modal is already open, close it before opening the new one
+    if (_modalResolve) closeModal(null);
+
     return new Promise(resolve => {
+        _prevFocus    = document.activeElement;
         _modalResolve = resolve;
         modalTitle.textContent = title;
 
@@ -27,7 +32,7 @@ export function showModal({ title, message, defaultValue, isDanger = false }) {
         }
 
         modalConfirm.className   = `modal-btn ${isDanger ? 'modal-btn-danger' : 'modal-btn-confirm'}`;
-        modalConfirm.textContent = isDanger ? 'Delete' : 'Save';
+        modalConfirm.textContent = confirmText || (isDanger ? 'Delete' : 'Save');
         modalOverlay.classList.add('visible');
     });
 }
@@ -35,6 +40,10 @@ export function showModal({ title, message, defaultValue, isDanger = false }) {
 export function closeModal(result) {
     modalOverlay.classList.remove('visible');
     if (_modalResolve) { _modalResolve(result); _modalResolve = null; }
+    if (_prevFocus && typeof _prevFocus.focus === 'function') {
+        _prevFocus.focus();
+        _prevFocus = null;
+    }
 }
 
 // ── Event wiring (self-contained) ──────────────────────────────────────────

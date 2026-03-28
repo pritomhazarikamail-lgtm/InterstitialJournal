@@ -30,7 +30,7 @@ import { generateDailySummary, initModelSelect } from './modules/ai.js';
 import { searchNotes, filterByTag, filterByDateRange } from './modules/search.js';
 import { showPage, toggleExportMenu, exportJSON, exportMarkdown, exportPrint, importNotes } from './modules/nav.js';
 import { updateLiveClock, updateLiveTimer } from './modules/timer.js';
-import { initNextUp } from './modules/write.js';
+import { initNextUp, renderRecentStrip as renderRecentStripWrite, setNextUp, clearNextUp } from './modules/write.js';
 import { showToast } from './modules/toast.js';
 
 /* =============================================================================
@@ -232,8 +232,8 @@ document.getElementById('summarize-btn').addEventListener('click', generateDaily
 const nextUpInput = document.getElementById('next-up-input');
 nextUpInput.addEventListener('input', () => {
     const val = nextUpInput.value.trim();
-    if (val) localStorage.setItem('next_up', val.slice(0, 200));
-    else     localStorage.removeItem('next_up');
+    if (val) setNextUp(val);
+    else     clearNextUp();
 });
 
 /* =============================================================================
@@ -303,7 +303,7 @@ document.getElementById('install-dismiss')?.addEventListener('click', () => {
     initModelSelect();
 
     // Re-render recent strip on write page
-    import('./modules/write.js').then(({ renderRecentStrip }) => renderRecentStrip());
+    renderRecentStripWrite();
 
     setInterval(updateLiveTimer, 30000);
 

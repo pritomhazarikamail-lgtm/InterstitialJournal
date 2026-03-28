@@ -53,8 +53,10 @@ function playBreakDone() { playTone(660, 0.15); setTimeout(() => playTone(880,  
 
 /* ── Streak UI ──────────────────────────────────────────────────────────────── */
 
+let _streakCelebrationTimer = null;
+
 export function updateStreakUI() {
-    const streak = Math.min(parseInt(localStorage.getItem('focus_streak') || '0', 10), 100);
+    const streak = Math.min(parseInt(localStorage.getItem('focus_streak') || '0', 10), 3);
     document.querySelectorAll('.streak-dot').forEach((dot, i) =>
         dot.classList.toggle('filled', i < streak)
     );
@@ -63,7 +65,10 @@ export function updateStreakUI() {
         msg.textContent = '🌟 Dopamine Hit! 3 in a row!';
         msg.classList.remove('hidden');
         document.getElementById('focus-section').classList.add('celebrate');
-        setTimeout(() => {
+        // Guard: clear any existing celebration timer before setting a new one
+        clearTimeout(_streakCelebrationTimer);
+        _streakCelebrationTimer = setTimeout(() => {
+            _streakCelebrationTimer = null;
             localStorage.setItem('focus_streak', '0');
             msg.classList.add('hidden');
             document.getElementById('focus-section').classList.remove('celebrate');
@@ -95,8 +100,7 @@ function pomoSetState(patch) {
 
 function pomoClearState() {
     ['pomo_goal','pomo_phase','pomo_end_ms','pomo_rounds',
-     'pomo_session_start','pomo_paused_remaining',
-     'current_focus','focus_start_time'].forEach(k => localStorage.removeItem(k));
+     'pomo_session_start','pomo_paused_remaining'].forEach(k => localStorage.removeItem(k));
 }
 
 function pomoDurationForPhase(phase, completedRounds) {
@@ -184,22 +188,30 @@ function pomoUpdateDisplay(s, remaining, isPaused) {
 }
 
 async function pomoPhaseEnd(s) {
-    if (s.phase === 'work') {
-        playWorkDone();
-        const newRounds = s.rounds + 1;
-        const dur       = Math.round((Date.now() - s.sessStart) / 60000);
-        await saveNote(`🍅 Pomodoro: ${s.goal} (#focus #pomodoro — round ${newRounds}, ${dur}m total)`);
-        const breakDur = pomoDurationForPhase('break', newRounds);
-        pomoSetState({ phase: 'break', rounds: newRounds, endMs: Date.now() + breakDur * 1000, paused: 0 });
-        showToast(`Round ${newRounds} done — ${newRounds % 4 === 0 ? 'Long break (15 min)! 🎉' : 'Short break (5 min)! 🎉'}`, 4000);
-    } else {
-        playBreakDone();
-        pomoSetState({ phase: 'work', endMs: Date.now() + POMO_WORK_SECS * 1000, paused: 0 });
-        showToast("Break over — let's go! 🍅", 3000);
+    try {
+        if (s.phase === 'work') {
+            playWorkDone();
+            const newRounds = s.rounds + 1;
+            const dur       = Math.round((Date.now() - s.sessStart) / 60000);
+            await saveNote(`🍅 Pomodoro: ${s.goal} (#focus #pomodoro — round ${newRounds}, ${dur}m total)`);
+            const breakDur = pomoDurationForPhase('break', newRounds);
+            pomoSetState({ phase: 'break', rounds: newRounds, endMs: Date.now() + breakDur * 1000, paused: 0 });
+            showToast(`Round ${newRounds} done — ${newRounds % 4 === 0 ? 'Long break (15 min)! 🎉' : 'Short break (5 min)! 🎉'}`, 4000);
+        } else {
+            playBreakDone();
+            pomoSetState({ phase: 'work', endMs: Date.now() + POMO_WORK_SECS * 1000, paused: 0 });
+            showToast("Break over — let's go! 🍅", 3000);
+        }
+        renderFocus();
+        pomoStartTick();
+    } catch (err) {
+        console.error('pomoPhaseEnd error:', err);
+        showToast('Timer error — session reset', 4000);
+        pomoClearState();
+        renderFocus();
+    } finally {
+        _pomoPhaseEnding = false;
     }
-    _pomoPhaseEnding = false;
-    renderFocus();
-    pomoStartTick();
 }
 
 /* ── Public API ─────────────────────────────────────────────────────────────── */

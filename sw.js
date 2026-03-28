@@ -24,12 +24,27 @@
  *    the current one.
  * ============================================================ */
 
-const CACHE_VERSION = 'journal-v19';
+const CACHE_VERSION = 'journal-v20';
 
 const SHELL_ASSETS = [
     './',
     './index.html',
+    './app.js',
+    './style.css',
     './manifest.json',
+    './modules/state.js',
+    './modules/storage.js',
+    './modules/modal.js',
+    './modules/toast.js',
+    './modules/timer.js',
+    './modules/write.js',
+    './modules/crud.js',
+    './modules/drive.js',
+    './modules/calendar.js',
+    './modules/pomodoro.js',
+    './modules/ai.js',
+    './modules/search.js',
+    './modules/nav.js',
     './icon-192.webp',
     './icon-192.png',
     './icon-512.png',

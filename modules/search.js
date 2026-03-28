@@ -89,13 +89,7 @@ export function filterByTag(tag) {
         return;
     }
 
-    notes.forEach(n => {
-        const card   = document.createElement('div'); card.className = 'note-item';
-        const dateEl = document.createElement('small'); dateEl.textContent = n.dateKey;
-        const body   = document.createElement('div');  body.textContent   = n.content;
-        card.append(dateEl, body);
-        list.appendChild(card);
-    });
+    notes.forEach(n => list.appendChild(buildNoteCard(n, true)));
 }
 
 export function filterByDateRange() {
