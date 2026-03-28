@@ -150,8 +150,17 @@ export function showWeeklyDigest() {
                         if (!patternsText) return;
                         const lines = patternsText
                             .split('\n')
-                            .map(l => l.replace(/^Pattern \d+:\s*/i, '').trim())
-                            .filter(l => l.length > 5)
+                            // Strip numbering, markdown bold, "Pattern N:" prefixes, preamble lines
+                            .map(l => l
+                                .replace(/^\*{1,2}Pattern\s*\d*[:.\s]*/i, '')
+                                .replace(/^\*{1,2}/, '')
+                                .replace(/\*{1,2}$/, '')
+                                .replace(/^[\d]+[.)]\s*/, '')
+                                .replace(/^[-•]\s*/, '')
+                                .trim()
+                            )
+                            // Drop intro lines ("Here are...", "I identified...", etc.)
+                            .filter(l => l.length > 10 && !/^here (are|is)/i.test(l) && !/^i (found|identified|noticed)/i.test(l))
                             .slice(0, 2);
                         if (!lines.length) return;
                         const patWrap = document.createElement('div');

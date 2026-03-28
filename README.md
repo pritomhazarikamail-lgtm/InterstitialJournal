@@ -27,6 +27,7 @@ Most journaling systems ask you to reflect once a day. Interstitial journaling f
   - `/focus` — note your current focus
   - `/idea` — capture a quick idea
   - `/note` — plain note with no prefix
+  - `/think` — restructure whatever is in the textarea into a clear question or problem statement (AI, requires model loaded)
 - **#tag support** — any `#hashtag` in your note is extracted and indexed automatically
 - **Next Up field** — set your next task before saving; it becomes the placeholder for your next entry, keeping your train of thought
 - **Recent strip** — the last 3 entries shown on the write page so you always have context
@@ -43,7 +44,9 @@ Most journaling systems ask you to reflect once a day. Interstitial journaling f
 - Configurable nudge interval: **15 min**, **30 min**, or **1 hour** (off by default)
 - Fires a browser notification only when the tab is in the background — no interruption if you're already in the app
 - Notifications stack into one using `tag: 'checkin'` rather than piling up
+- Sent via **Service Worker** (`registration.showNotification()`) so they work on **Android Chrome and iOS 16.4+ PWA** — not the page-level `new Notification()` constructor which is blocked on mobile
 - Preference saved across sessions; browser permission requested once
+- On iOS: notifications require the app to be installed via "Add to Home Screen"
 
 ### 📅 History
 - **Calendar heatmap** — colour-coded grid showing days by entry volume (4 intensity levels)
@@ -78,14 +81,25 @@ Most journaling systems ask you to reflect once a day. Interstitial journaling f
 - **Auto-logging** — each completed round and session finish are saved as notes automatically
 - **Dopamine streak** — 3 completed focus sessions lights up the streak dots with a celebration
 
-### ✨ AI Day Summary (100% On-Device)
-- Summarises a selected day's notes into **Wins**, **Themes**, and a **Reflection**
-- Reads directly from your note data — not from the rendered DOM
-- Runs entirely in your browser via [WebLLM](https://github.com/mlc-ai/web-llm) — no data ever leaves your device
-- Two model options:
-  - **Llama 3.2 1B** (~700 MB, recommended) — structured output with all three sections
-  - **SmolLM2 360M** (~200 MB) — lightest option, plain reflection style
-- Downloaded once, cached in IndexedDB, works offline forever after
+### ✨ AI Features (100% On-Device)
+All AI runs entirely in your browser via [WebLLM](https://github.com/mlc-ai/web-llm) — no data ever leaves your device. The model downloads once, is cached in IndexedDB, and works offline forever after. Two model options:
+- **Llama 3.2 1B** (~700 MB, recommended)
+- **SmolLM2 360M** (~200 MB) — lightest option
+
+**Explicit (button-triggered):**
+- **AI Day Summary** — click Summarize on any day to get structured **Wins**, **Themes**, and a **Reflection**. This is also the trigger that loads the model into memory for the session.
+
+**Automatic (activate once model is warm — zero cost otherwise):**
+- **Smart tag suggestions** — as you type (≥30 chars, 2 s debounce), 1–3 relevant `#tag` pills appear below the textarea; tap to append. Suggestions match your existing tag vocabulary for consistency.
+- **Daily narrative** — when you open today in History with 3+ notes after noon, a 2-sentence "You spent the morning…" summary appears above the note list. Cached per day.
+- **Intention alignment** — after 4 pm, the today's-goal anchor strip shows a one-sentence honest check: *"✓ On track —"*, *"↗ Partially —"*, or *"→ Drifted —"*. Cached per day.
+- **Weekly reflection question** — when you open the weekly digest (📊), one specific, personal question appears below the stats to prompt reflection. Cached per week.
+- **Pattern detection** — alongside the reflection question, two concrete observations about your habits and patterns (time of day, recurring blockers, energy). Requires 10+ notes in history.
+- **Mood dots** — a tiny coloured dot (🟢 positive / ⚫ neutral / 🔴 negative) appears on each note card after classification. Stored locally, never re-run for the same note.
+- **Note cleanup** — tap ✨ on any note card to fix grammar and clarity while preserving meaning. Intentional — not automatic.
+- **`/think` slash command** — type `/think` to have the AI restructure whatever is in the textarea into a clear question or problem statement.
+
+**Performance contract:** background features never trigger a model download. If the model is not warm, they silently skip. The model re-warms on the next app open (using `requestIdleCallback`) only if you have previously loaded it.
 
 ### ☁️ Google Drive Sync *(optional)*
 - Entirely optional — the app is fully functional without ever signing in
@@ -202,7 +216,7 @@ InterstitialJournal/
 │   ├── calendar.js      # Calendar heatmap, day timeline, day digest, note cards, tag cloud
 │   ├── crud.js          # saveNote, editNote, deleteNote, pinNote, completeTodo, swipeDeleteNote, toggleDarkMode
 │   ├── pomodoro.js      # Focus timer, Pomodoro cycle, streak UI
-│   ├── ai.js            # On-device AI summary via WebLLM
+│   ├── ai.js            # On-device AI via WebLLM — day summary, tag suggestions, narrative, alignment, mood, patterns, /think, cleanup
 │   ├── search.js        # Full-text search, tag filter, date range filter
 │   ├── nav.js           # Page navigation, export/import
 │   ├── reminders.js     # Periodic check-in notifications
@@ -226,18 +240,18 @@ haptic.js         (no deps)
 timer.js          ← storage
 write.js          ← storage
 draft.js          ← (DOM only — no module deps)
-voice.js          ← (DOM only — no module deps)
-calendar.js       ← storage, state          (fires custom DOM events instead of importing crud/search)
-weekly.js         ← storage, calendar
+voice.js          ← toast
+ai.js             ← storage                 (dynamic import of WebLLM; fires 'ai-ready' DOM event)
+calendar.js       ← storage, state, ai      (fires custom DOM events instead of importing crud/search)
+weekly.js         ← storage, calendar, ai
 drive.js          ← storage, toast, calendar, pomodoro
 search.js         ← storage, state, calendar
 crud.js           ← storage, modal, toast, haptic, drive, calendar, write, timer
 pomodoro.js       ← toast, modal, crud, drive, timer
 reminders.js      ← toast
-intention.js      ← crud, write, storage, toast
-ai.js             ← storage                 (dynamic import of WebLLM)
+intention.js      ← crud, write, storage, toast, ai
 nav.js            ← storage, state, calendar, write, toast, modal
-app.js            ← all modules             (routes note-pin/edit/delete/complete/swipe-delete/tag-filter events)
+app.js            ← all modules             (routes note-pin/edit/delete/complete/swipe-delete/tag-filter/note-cleanup/note-saved/note-mood-update events)
 ```
 
 Circular dependencies are broken with custom DOM events: `buildNoteCard` fires `note-pin`, `note-edit`, `note-delete`, `note-complete`, `note-swipe-delete`, and `tag-filter` on `document`. `app.js` listens for all of these and routes them to the appropriate functions.
@@ -250,10 +264,10 @@ Circular dependencies are broken with custom DOM events: `buildNoteCard` fires `
 |---|---|---|---|
 | Core journaling | ✅ | ✅ | ✅ |
 | PWA install | ✅ | ✅ | ✅ iOS 16.4+ |
-| Check-in reminders | ✅ | ✅ | ✅ |
+| Check-in reminders | ✅ | ✅ | ✅ PWA only on iOS |
 | Voice to text | ✅ | ❌ | ✅ |
 | Haptic feedback | ✅ Android | ❌ | ❌ |
-| AI Summary | ✅ WebGPU | ❌ no WebGPU yet | ✅ macOS 14+ |
+| AI Summary + features | ✅ WebGPU | ❌ no WebGPU yet | ✅ macOS 14+ |
 | Offline | ✅ | ✅ | ✅ |
 | Google Drive Sync | ✅ | ✅ | ✅ |
 | Print / PDF export | ✅ | ✅ | ✅ |

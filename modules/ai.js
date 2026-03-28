@@ -169,11 +169,16 @@ export async function generateWeeklyReflection(notes) {
     if (cached) return cached;
     const sample = notes.slice(-20).map(n => `• ${n.content.slice(0, 70)}`).join('\n');
     const result = await _runPrompt([{
+        role: 'system',
+        content: 'You are a concise journaling coach. Return ONLY the question itself — no intro, no explanation, no extra text.',
+    }, {
         role: 'user',
-        content: `From these journal entries, ask ONE thoughtful question to help the person reflect on their week. Be specific to their content — not generic.\n${sample}\nQuestion:`,
-    }], 80, 0.5);
-    if (result) localStorage.setItem(key, result);
-    return result;
+        content: `Based on these journal entries, write ONE specific, personal reflection question about this week. Reference the actual content.\n\n${sample}`,
+    }], 60, 0.5);
+    // Strip any leading/trailing quotes the model may add
+    const clean = result ? result.replace(/^["']|["']$/g, '').trim() : null;
+    if (clean) localStorage.setItem(key, clean);
+    return clean;
 }
 
 /** 2-sentence narrative of a day's work. Cached per dateKey. Auto-generates only for today. */
@@ -187,9 +192,12 @@ export async function generateNarrativeSummary(notes, dateKey) {
         .map(n => `[${new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}] ${n.content.slice(0, 80)}`)
         .join('\n');
     const result = await _runPrompt([{
+        role: 'system',
+        content: 'You summarise journal entries in 2 sentences. Write directly — no preamble, no "Here is a summary". Use "You" (e.g. "You spent the morning...").',
+    }, {
         role: 'user',
-        content: `Write 2 sentences summarising this person's workday. Be specific about what they did.\n${texts}\nSummary:`,
-    }], 90, 0.3);
+        content: texts,
+    }], 100, 0.3);
     if (result) localStorage.setItem(key, result);
     return result;
 }
@@ -202,9 +210,12 @@ export async function checkIntentionAlignment(intention, notes, dateKey) {
     if (cached) return cached;
     const texts = notes.slice(-12).map(n => n.content.slice(0, 70)).join('\n');
     const result = await _runPrompt([{
+        role: 'system',
+        content: 'You give honest, kind one-sentence assessments. Start with "✓ On track —", "↗ Partially —", or "→ Drifted —" then one short sentence. No extra text.',
+    }, {
         role: 'user',
-        content: `Goal: "${intention}"\nNotes:\n${texts}\nIn one sentence, did these notes show progress toward the goal? Be honest but kind.\nAssessment:`,
-    }], 60, 0.3);
+        content: `Goal: "${intention}"\n\nNotes:\n${texts}`,
+    }], 50, 0.2);
     if (result) localStorage.setItem(key, result);
     return result;
 }
@@ -213,9 +224,12 @@ export async function checkIntentionAlignment(intention, notes, dateKey) {
 export async function cleanupNote(text) {
     if (!_modelReady || !text.trim()) return null;
     return _runPrompt([{
+        role: 'system',
+        content: 'Fix grammar and clarity. Keep the same meaning and length. Return ONLY the cleaned text — nothing else.',
+    }, {
         role: 'user',
-        content: `Fix the grammar and clarity of this rough note. Keep the same meaning and approximate length. Return only the cleaned text.\nNote: "${text.slice(0, 500)}"\nCleaned:`,
-    }], 160, 0.2);
+        content: text.slice(0, 500),
+    }], 180, 0.2);
 }
 
 /** 2 specific behavioural patterns from recent entries. Cached per week. */
@@ -230,9 +244,12 @@ export async function detectPatterns(notes) {
         return `[${day} ${t}] ${n.content.slice(0, 55)}`;
     }).join('\n');
     const result = await _runPrompt([{
+        role: 'system',
+        content: 'You identify patterns in journal entries. Return EXACTLY 2 lines. Each line is one concrete observation (no numbering, no headers, no markdown, no intro).',
+    }, {
         role: 'user',
-        content: `Find 2 specific patterns in these journal entries (time of day, recurring blockers, habits). Be concrete, not generic.\n${sample}\nPattern 1:\nPattern 2:`,
-    }], 110, 0.4);
+        content: sample,
+    }], 120, 0.4);
     if (result) localStorage.setItem(key, result);
     return result;
 }
@@ -241,8 +258,11 @@ export async function detectPatterns(notes) {
 export async function structureThought(text) {
     if (!_modelReady || !text.trim()) return null;
     return _runPrompt([{
+        role: 'system',
+        content: 'Rewrite rough thoughts as clear questions or problem statements. Return ONLY the rewritten text — no intro, no explanation.',
+    }, {
         role: 'user',
-        content: `Rewrite this rough thought as a clear, specific question or problem statement in 1-2 sentences.\nThought: "${text.slice(0, 400)}"\nClear version:`,
+        content: text.slice(0, 400),
     }], 80, 0.3);
 }
 
@@ -250,8 +270,11 @@ export async function structureThought(text) {
 export async function classifyMood(text) {
     if (!_modelReady || !text.trim()) return null;
     const result = await _runPrompt([{
+        role: 'system',
+        content: 'Reply with exactly one word: positive, neutral, or negative.',
+    }, {
         role: 'user',
-        content: `Classify the tone of this note as exactly one word: positive, neutral, or negative.\nNote: "${text.slice(0, 150)}"\nTone:`,
+        content: text.slice(0, 150),
     }], 5, 0.1);
     if (!result) return null;
     const l = result.toLowerCase();

@@ -490,6 +490,15 @@ document.getElementById('install-dismiss')?.addEventListener('click', () => {
     // Non-sync users don't need tombstones older than 30 days
     if (localStorage.getItem('auto_sync_enabled') !== 'true') pruneDeletedIds(30);
 
+    // One-time cache bust for AI outputs generated before prompt refinements (v2)
+    if (localStorage.getItem('ai_prompt_version') !== '2') {
+        Object.keys(localStorage)
+            .filter(k => k.startsWith('ai_narrative_') || k.startsWith('ai_refl_') ||
+                         k.startsWith('ai_alignment_') || k.startsWith('ai_patterns_'))
+            .forEach(k => localStorage.removeItem(k));
+        localStorage.setItem('ai_prompt_version', '2');
+    }
+
     updateStreakUI();
     initNextUp();
     initDraft();
