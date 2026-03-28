@@ -137,18 +137,6 @@ async function _runPrompt(messages, maxTokens = 120, temp = 0.3) {
    All return null/[] if model not ready or on error — never throw, never block.
    ══════════════════════════════════════════════════════════════════════════════ */
 
-/** Suggest 1-3 hashtags for note text. Existing vocab keeps suggestions consistent. */
-export async function suggestTags(text, existingTagVocab = []) {
-    if (!_modelReady || text.length < 30) return [];
-    const vocab  = existingTagVocab.slice(0, 15).join(' ');
-    const prompt = `Suggest 1-3 hashtags for this journal note.${
-        vocab ? ` Prefer from these existing tags: ${vocab}` : ''
-    }\nReturn ONLY the tags space-separated (e.g. #focus #win).\nNote: "${text.slice(0, 250)}"\nTags:`;
-    const result = await _runPrompt([{ role: 'user', content: prompt }], 30, 0.2);
-    if (!result) return [];
-    return (result.match(/#\w+/g) || []).slice(0, 3).map(t => t.toLowerCase());
-}
-
 /** One thoughtful reflection question for the week. Cached per Monday key. */
 export async function generateWeeklyReflection(notes) {
     if (!_modelReady || notes.length < 3) return null;
@@ -243,33 +231,6 @@ export async function detectPatterns(notes) {
     }], 120, 0.4);
     if (result) localStorage.setItem(key, result);
     return result;
-}
-
-/** Restructure a half-formed thought into a clear question or problem statement. */
-export async function structureThought(text) {
-    if (!_modelReady || !text.trim()) return null;
-    return _runPrompt([{
-        role: 'system',
-        content: 'You are a text editor. Rewrite the INPUT below as ONE clear, specific question or problem statement. Use the exact same topic and details from the INPUT — do not invent new topics. Return ONLY the rewritten sentence.',
-    }, {
-        role: 'user',
-        content: `INPUT: ${text.slice(0, 400)}`,
-    }], 60, 0.1);
-}
-
-/** Classify a note's tone as 'positive', 'neutral', or 'negative'. */
-export async function classifyMood(text) {
-    if (!_modelReady || !text.trim()) return null;
-    const result = await _runPrompt([{
-        role: 'system',
-        content: 'Reply with exactly one word: positive, neutral, or negative.',
-    }, {
-        role: 'user',
-        content: text.slice(0, 150),
-    }], 5, 0.1);
-    if (!result) return null;
-    const l = result.toLowerCase();
-    return l.includes('positive') ? 'positive' : l.includes('negative') ? 'negative' : 'neutral';
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════

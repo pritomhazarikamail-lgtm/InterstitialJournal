@@ -308,8 +308,11 @@ export async function uploadToDrive() {
     });
 
     if (res.ok && !driveFileId) {
-        driveFileId = (await res.json()).id;
-        localStorage.setItem(DRIVE_FILE_ID_KEY, driveFileId);
+        const fileId = (await res.json()).id;
+        if (fileId) {
+            driveFileId = fileId;
+            localStorage.setItem(DRIVE_FILE_ID_KEY, driveFileId);
+        }
     }
 }
 

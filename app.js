@@ -32,7 +32,7 @@ import { generateDailySummary, initModelSelect, preloadModel, isModelReady, clea
 import { searchNotes, filterByTag, filterByDateRange } from './modules/search.js';
 import { showPage, toggleExportMenu, exportJSON, exportMarkdown, exportPrint, importNotes } from './modules/nav.js';
 import { updateLiveClock, updateLiveTimer } from './modules/timer.js';
-import { initNextUp, renderRecentStrip as renderRecentStripWrite, setNextUp, clearNextUp } from './modules/write.js';
+import { initNextUp, renderRecentStrip, setNextUp, clearNextUp } from './modules/write.js';
 import { pruneDeletedIds, getLocalNotes, sanitiseId, getTagIndex } from './modules/storage.js';
 import { showToast } from './modules/toast.js';
 import { initDraft }  from './modules/draft.js';
@@ -460,7 +460,7 @@ document.getElementById('install-dismiss')?.addEventListener('click', () => {
     preloadModel();
 
     // Re-render recent strip on write page
-    renderRecentStripWrite();
+    renderRecentStrip();
 
     setInterval(updateLiveTimer, 30000);
 
