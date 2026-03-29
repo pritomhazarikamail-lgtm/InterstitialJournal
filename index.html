@@ -123,21 +123,17 @@
          ──────────────────────────────────────────────── -->
     <div id="home-page">
 
-        <!-- Header: avatar + live clock + dopamine streak -->
+        <!-- Header: single compact row -->
         <header class="home-header">
-            <div class="home-header__left">
-                <button id="header-avatar-btn" class="header-avatar-btn" aria-label="Open profile">
-                    <span id="header-avatar" class="header-avatar">?</span>
-                    <span class="header-avatar-label" id="header-avatar-label">Profile</span>
-                </button>
-                <div class="home-header__datetime">
-                    <span id="live-date"></span>
-                    <div id="time-blindness-nudge"></div>
-                </div>
+            <button id="header-avatar-btn" class="header-avatar-btn" aria-label="Open profile">
+                <span id="header-avatar" class="header-avatar">?</span>
+            </button>
+            <div class="home-header__center">
+                <span id="live-date"></span>
+                <div id="time-blindness-nudge"></div>
             </div>
-            <div class="home-header__right" id="streak-container">
-                <div class="home-header__streak-label">Dopamine Streak</div>
-                <div id="streak-dots" class="home-header__dots" role="img" aria-label="Streak dots">
+            <div id="streak-container" class="home-header__streak">
+                <div id="streak-dots" class="home-header__dots" role="img" aria-label="Dopamine streak">
                     <div class="streak-dot" id="dot-1"></div>
                     <div class="streak-dot" id="dot-2"></div>
                     <div class="streak-dot" id="dot-3"></div>

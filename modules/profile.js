@@ -50,11 +50,9 @@ export function applyAccent(name) {
 /* ── Header avatar ─────────────────────────────────────────────────────────── */
 
 export function renderHeaderAvatar() {
-    const el    = document.getElementById('header-avatar');
-    const label = document.getElementById('header-avatar-label');
-    const name  = localStorage.getItem('profile_name') || '';
-    if (el)    el.textContent    = name.trim() ? name.trim()[0].toUpperCase() : '?';
-    if (label) label.textContent = name.trim() || 'Profile';
+    const el   = document.getElementById('header-avatar');
+    const name = localStorage.getItem('profile_name') || '';
+    if (el) el.textContent = name.trim() ? name.trim()[0].toUpperCase() : '?';
 }
 
 /* ── Init ──────────────────────────────────────────────────────────────────── */
@@ -330,12 +328,10 @@ export function wireProfileEvents() {
         const name    = nameInput.value.slice(0, 50);
         localStorage.setItem('profile_name', name.trim());
         const initial = name.trim() ? name.trim()[0].toUpperCase() : '?';
-        const large   = document.getElementById('profile-avatar-large');
-        const header  = document.getElementById('header-avatar');
-        const label   = document.getElementById('header-avatar-label');
+        const large  = document.getElementById('profile-avatar-large');
+        const header = document.getElementById('header-avatar');
         if (large)  large.textContent  = initial;
         if (header) header.textContent = initial;
-        if (label)  label.textContent  = name.trim() || 'Profile';
     });
 
     // Timezone
