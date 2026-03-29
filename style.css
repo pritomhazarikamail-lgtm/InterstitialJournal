@@ -119,12 +119,12 @@ mark  { background: rgba(61,107,255,0.2); color: var(--accent); border-radius: 3
     bottom: 0;
     left: 0;
     right: 0;
-    width: 100%;
+    width: 100vw;
     background: var(--card-bg);
     display: flex;
     justify-content: space-between;
     gap: 10px;
-    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+    padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
     z-index: 1000;
     box-shadow: 0 -1px 0 var(--border), 0 -8px 24px rgba(0,0,0,0.04);
