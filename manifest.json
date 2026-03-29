@@ -2,8 +2,8 @@
     "name": "Interstitial Journal",
     "short_name": "Journal",
     "description": "A private, offline-first interstitial journal with focus timer and AI summaries.",
-    "start_url": "/InterstitialJournal/index.html",
-    "scope": "/InterstitialJournal/",
+    "start_url": "./index.html",
+    "scope": "./",
     "display": "standalone",
     "orientation": "portrait-primary",
     "background_color": "#111010",
@@ -42,7 +42,7 @@
             "name": "New Entry",
             "short_name": "Write",
             "description": "Jump straight to the write tab",
-            "url": "/InterstitialJournal/index.html#write",
+            "url": "./index.html#write",
             "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
         }
     ],

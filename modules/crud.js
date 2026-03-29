@@ -8,7 +8,7 @@
  */
 
 import {
-    validateNote, sanitiseId, generateId, getLocalNotes, setLocalNotes,
+    createNote, extractTags, validateNote, sanitiseId, generateId, getLocalNotes, setLocalNotes,
     getDeletedIds, setDeletedIds, recordDeletedAt, getISODate,
 } from './storage.js';
 import { showModal }  from './modal.js';
@@ -25,12 +25,11 @@ export async function saveNote(manualText = null) {
     if (!text) return;
     if (text.length > 5000) { showToast('Note too long (max 5000 chars)'); return; }
 
-    const newNote = validateNote({
+    const newNote = createNote({
         id:        generateId(),
         timestamp: new Date().toISOString(),
         content:   text,
         dateKey:   getISODate(new Date()),
-        tags:      (text.match(/#(\w+)/g) || []).map(t => t.toLowerCase()),
     });
     if (!newNote) return;
 
@@ -84,7 +83,7 @@ export async function editNote(id) {
 
     notes[idx].content   = newText.trim();
     notes[idx].timestamp = new Date().toISOString();
-    notes[idx].tags      = (newText.match(/#(\w+)/g) || []).map(t => t.toLowerCase());
+    notes[idx].tags      = extractTags(newText);
     setLocalNotes(notes);
     showNotesForDay(notes[idx].dateKey);
     markDirty();
@@ -103,7 +102,7 @@ export async function applyNoteEdit(id, newContent) {
     if (idx === -1) return;
     notes[idx].content   = newContent.trim();
     notes[idx].timestamp = new Date().toISOString();
-    notes[idx].tags      = (newContent.match(/#(\w+)/g) || []).map(t => t.toLowerCase());
+    notes[idx].tags      = extractTags(newContent);
     setLocalNotes(notes);
     showNotesForDay(notes[idx].dateKey);
     markDirty();
@@ -178,6 +177,13 @@ export function swipeDeleteNote(id) {
 
     const deletedNote = notes[idx];
     setLocalNotes(notes.filter(n => n.id !== safeId));
+
+    const delSet = new Set(getDeletedIds());
+    delSet.add(safeId);
+    setDeletedIds(Array.from(delSet));
+    recordDeletedAt(safeId);
+    markDirty();
+
     renderAll();
     // Refresh the open day view so the card disappears immediately
     const titleEl = document.getElementById('selected-date-title');
@@ -186,30 +192,26 @@ export function swipeDeleteNote(id) {
     }
     haptic([15, 30]);
 
-    let undone = false;
     showUndoToast('Note deleted', () => {
-        undone = true;
         const current = getLocalNotes();
         current.push(deletedNote);
         setLocalNotes(current);
+
+        const restored = new Set(getDeletedIds());
+        restored.delete(safeId);
+        setDeletedIds(Array.from(restored));
+
+        const deletedAtMap = JSON.parse(localStorage.getItem('journal_deleted_at') || '{}');
+        delete deletedAtMap[safeId];
+        localStorage.setItem('journal_deleted_at', JSON.stringify(deletedAtMap));
+
         renderAll();
-        // Restore the note back into the day view
         if (titleEl?.textContent?.startsWith('Notes for ')) {
             showNotesForDay(titleEl.textContent.replace('Notes for ', '').trim());
         }
+        markDirty();
         showToast('Restored ↺');
     }, 5000);
-
-    // After undo window: permanently tombstone so Drive sync propagates deletion
-    setTimeout(() => {
-        if (!undone) {
-            const delSet = new Set(getDeletedIds());
-            delSet.add(safeId);
-            setDeletedIds(Array.from(delSet));
-            recordDeletedAt(safeId);
-            markDirty();
-        }
-    }, 5200);
 }
 
 export function toggleDarkMode() {

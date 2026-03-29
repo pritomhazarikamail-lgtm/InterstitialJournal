@@ -83,8 +83,8 @@ function _scheduleNextReminder() {
         if (!anyVisible) {
             await self.registration.showNotification('Interstitial Journal', {
                 body:     'Time to check in — what are you working on?',
-                icon:     '/InterstitialJournal/icon-192.png',
-                badge:    '/InterstitialJournal/icon-120.png',
+                icon:     new URL('icon-192.png', self.registration.scope).href,
+                badge:    new URL('icon-120.png', self.registration.scope).href,
                 tag:      'checkin',
                 renotify: true,
             });
@@ -150,7 +150,7 @@ self.addEventListener('notificationclick', event => {
                     return client.focus();
                 }
             }
-            return self.clients.openWindow('/InterstitialJournal/');
+            return self.clients.openWindow(self.registration.scope);
         })
     );
 });

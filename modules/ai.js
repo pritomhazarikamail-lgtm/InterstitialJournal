@@ -74,7 +74,7 @@ export function isModelReady() { return _modelReady; }
 async function loadEngine(modelId) {
     if (_engines.has(modelId)) return _engines.get(modelId);
     const webllm = await import('https://esm.run/@mlc-ai/web-llm');
-    if (!navigator.gpu) throw new Error('WebGPU is not supported on this browser/device.');
+    if (!navigator.gpu) throw new Error('WebGPU is not supported on this browser/device. On-device AI requires a WebGPU-capable runtime.');
     const engine = await webllm.CreateMLCEngine(modelId, {
         initProgressCallback: report => {
             const pct = report.progress != null ? Math.round(report.progress * 100) : null;

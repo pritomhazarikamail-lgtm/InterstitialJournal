@@ -38,15 +38,41 @@ export function validateNote(note) {
         content:   note.content.slice(0, 5000),
         dateKey:   note.dateKey,
         pinned:    note.pinned === true,
-        tags: Array.isArray(note.tags)
-            ? note.tags.filter(t => typeof t === 'string' && /^#\w+$/.test(t)).slice(0, 20)
-            : [],
+        tags: normalizeTags(note.tags),
     };
 }
 
 /** Safe JSON.parse — never throws. */
 export function safeJSON(str, fallback) {
     try { return JSON.parse(str) ?? fallback; } catch { return fallback; }
+}
+
+const TAG_REGEX = /#[A-Za-z0-9_-]+/g;
+const TAG_VALIDATOR = /#[A-Za-z0-9_-]+/;
+
+export function extractTags(text) {
+    if (typeof text !== 'string') return [];
+    return Array.from(new Set((text.match(TAG_REGEX) || []).map(t => t.toLowerCase()))).slice(0, 20);
+}
+
+function normalizeTags(tags) {
+    if (!Array.isArray(tags)) return [];
+    return Array.from(new Set(tags
+        .filter(t => typeof t === 'string')
+        .map(t => t.toLowerCase())
+        .filter(t => TAG_VALIDATOR.test(t))
+    )).slice(0, 20);
+}
+
+export function createNote({ id, content, timestamp, dateKey, pinned = false }) {
+    return validateNote({
+        id,
+        content,
+        timestamp,
+        dateKey,
+        pinned,
+        tags: extractTags(content),
+    });
 }
 
 /** Format a Date as YYYY-MM-DD in local time. */

@@ -86,8 +86,8 @@ async function _notify() {
 
     const payload = {
         body:     'Time to check in — what are you working on?',
-        icon:     '/InterstitialJournal/icon-192.png',
-        badge:    '/InterstitialJournal/icon-120.png',
+        icon:     new URL('icon-192.png', document.baseURI).href,
+        badge:    new URL('icon-120.png', document.baseURI).href,
         tag:      'checkin',
         renotify: true,
     };

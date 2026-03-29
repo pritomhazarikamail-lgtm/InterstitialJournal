@@ -474,7 +474,7 @@ document.getElementById('install-dismiss')?.addEventListener('click', () => {
 
     // Service Worker registration
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/InterstitialJournal/sw.js')
+        navigator.serviceWorker.register('sw.js')
             .then(reg => {
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'visible') reg.update().catch(() => {});
