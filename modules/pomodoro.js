@@ -3,7 +3,8 @@
  *
  * State survives PWA reloads via localStorage.
  * Keys: pomo_goal, pomo_phase (work|break|idle), pomo_end_ms,
- *       pomo_rounds, pomo_session_start, pomo_paused_remaining, focus_streak
+ *       pomo_rounds, pomo_session_start, pomo_paused_remaining,
+ *       pomo_paused_total_ms, pomo_pause_start_ms, focus_streak
  *
  * Ring maths: r=52, circumference = 2π×52 ≈ 326.73
  *   stroke-dashoffset = circumference × (1 − progress)  → 0=full, 326.73=empty
@@ -70,10 +71,8 @@ export function updateStreakUI() {
         clearTimeout(_streakCelebrationTimer);
         _streakCelebrationTimer = setTimeout(() => {
             _streakCelebrationTimer = null;
-            localStorage.setItem('focus_streak', '0');
             msg.classList.add('hidden');
             document.getElementById('focus-section').classList.remove('celebrate');
-            updateStreakUI();
         }, 5000);
     }
 }
@@ -88,6 +87,8 @@ function pomoGetState() {
         rounds:    parseInt(localStorage.getItem('pomo_rounds')        || '0', 10),
         sessStart: parseInt(localStorage.getItem('pomo_session_start') || '0', 10),
         paused:    parseInt(localStorage.getItem('pomo_paused_remaining') || '0', 10),
+        pausedTotalMs: parseInt(localStorage.getItem('pomo_paused_total_ms') || '0', 10),
+        pauseStartMs: parseInt(localStorage.getItem('pomo_pause_start_ms') || '0', 10),
     };
 }
 
@@ -95,13 +96,15 @@ function pomoSetState(patch) {
     const map = {
         goal: 'pomo_goal', phase: 'pomo_phase', endMs: 'pomo_end_ms',
         rounds: 'pomo_rounds', sessStart: 'pomo_session_start', paused: 'pomo_paused_remaining',
+        pausedTotalMs: 'pomo_paused_total_ms', pauseStartMs: 'pomo_pause_start_ms',
     };
     Object.entries(patch).forEach(([k, v]) => { if (map[k]) localStorage.setItem(map[k], String(v)); });
 }
 
 function pomoClearState() {
     ['pomo_goal','pomo_phase','pomo_end_ms','pomo_rounds',
-     'pomo_session_start','pomo_paused_remaining'].forEach(k => localStorage.removeItem(k));
+     'pomo_session_start','pomo_paused_remaining','pomo_paused_total_ms','pomo_pause_start_ms']
+        .forEach(k => localStorage.removeItem(k));
 }
 
 function pomoDurationForPhase(phase, completedRounds) {
@@ -190,17 +193,19 @@ function pomoUpdateDisplay(s, remaining, isPaused) {
 
 async function pomoPhaseEnd(s) {
     try {
+        const pauseDelta = s.paused > 0 && s.pauseStartMs > 0 ? Date.now() - s.pauseStartMs : 0;
         if (s.phase === 'work') {
             playWorkDone();
             const newRounds = s.rounds + 1;
-            const dur       = Math.round((Date.now() - s.sessStart) / 60000);
+            const activeMs = Math.max(0, Date.now() - s.sessStart - s.pausedTotalMs - pauseDelta);
+            const dur       = Math.round(activeMs / 60000);
             await saveNote(`🍅 Pomodoro: ${s.goal} (#focus #pomodoro — round ${newRounds}, ${dur}m total)`);
             const breakDur = pomoDurationForPhase('break', newRounds);
-            pomoSetState({ phase: 'break', rounds: newRounds, endMs: Date.now() + breakDur * 1000, paused: 0 });
+            pomoSetState({ phase: 'break', rounds: newRounds, endMs: Date.now() + breakDur * 1000, paused: 0, pauseStartMs: 0 });
             showToast(`Round ${newRounds} done — ${newRounds % 4 === 0 ? 'Long break (15 min)! 🎉' : 'Short break (5 min)! 🎉'}`, 4000);
         } else {
             playBreakDone();
-            pomoSetState({ phase: 'work', endMs: Date.now() + getWorkSecs() * 1000, paused: 0 });
+            pomoSetState({ phase: 'work', endMs: Date.now() + getWorkSecs() * 1000, paused: 0, pauseStartMs: 0 });
             showToast("Break over — let's go! 🍅", 3000);
         }
         renderFocus();
@@ -223,7 +228,16 @@ export async function startFocus() {
     const text = noteInput.value.trim();
     if (!text) { showToast('Enter a focus goal first'); return; }
     pomoClearState();
-    pomoSetState({ goal: text.slice(0, 200), phase: 'work', endMs: Date.now() + getWorkSecs() * 1000, rounds: 0, sessStart: Date.now(), paused: 0 });
+    pomoSetState({
+        goal: text.slice(0, 200),
+        phase: 'work',
+        endMs: Date.now() + getWorkSecs() * 1000,
+        rounds: 0,
+        sessStart: Date.now(),
+        paused: 0,
+        pausedTotalMs: 0,
+        pauseStartMs: 0,
+    });
     noteInput.value = '';
     charCounter.textContent = '0 / 5000';
     charCounter.classList.remove('warn');
@@ -237,12 +251,19 @@ export function pomoPauseResume() {
     if (s.phase === 'idle') return;
 
     if (s.paused > 0) {
-        pomoSetState({ endMs: Date.now() + s.paused * 1000, paused: 0 });
+        const now = Date.now();
+        const pauseDelta = s.pauseStartMs > 0 ? now - s.pauseStartMs : 0;
+        pomoSetState({
+            endMs: Date.now() + s.paused * 1000,
+            paused: 0,
+            pausedTotalMs: s.pausedTotalMs + pauseDelta,
+            pauseStartMs: 0,
+        });
         _setPauseBtn(false);
         pomoStartTick();
     } else {
         const rem = Math.max(0, Math.round((s.endMs - Date.now()) / 1000));
-        pomoSetState({ paused: rem });
+        pomoSetState({ paused: rem, pauseStartMs: Date.now() });
         pomoStopTick();
         _setPauseBtn(true);
         pomoTick();
@@ -253,7 +274,9 @@ export async function completeFocus() {
     const s = pomoGetState();
     if (!s.goal) return;
     pomoStopTick();
-    const totalMins = s.sessStart ? Math.round((Date.now() - s.sessStart) / 60000) : 0;
+    const pauseDelta = s.paused > 0 && s.pauseStartMs > 0 ? Date.now() - s.pauseStartMs : 0;
+    const activeMs = Math.max(0, Date.now() - s.sessStart - s.pausedTotalMs - pauseDelta);
+    const totalMins = s.sessStart ? Math.round(activeMs / 60000) : 0;
     await saveNote(`✅ Finished: ${s.goal} (#focus #pomodoro — ${s.rounds} 🍅, ${totalMins}m)`);
     const newStreak  = parseInt(localStorage.getItem('focus_streak') || '0', 10) + 1;
     const bestStreak = parseInt(localStorage.getItem('best_focus_streak') || '0', 10);
