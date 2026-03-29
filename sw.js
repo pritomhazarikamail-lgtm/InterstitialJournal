@@ -1,30 +1,23 @@
 'use strict';
 
 /* ============================================================
- * Interstitial Journal — Service Worker  v19
+ * Interstitial Journal — Service Worker  v27
  *
- * Strategy: Cache-first for shell assets, stale-while-revalidate
- * for fonts/CDN, network-first (with cache fallback) for
- * everything else. This keeps the app snappy offline while
- * still picking up shell updates promptly.
+ * NEW in v27:
+ *  • Background check-in notifications via SW message channel.
+ *    The page sends 'SET_REMINDER' with an intervalMins value.
+ *    The SW stores it and uses a self-scheduling setTimeout chain
+ *    so notifications fire even when the tab is fully backgrounded
+ *    or the browser is sleeping (as long as the SW is alive).
+ *    On mobile, the SW may be killed; on PWA installs it survives
+ *    much longer. This is the best achievable without Periodic
+ *    Background Sync (which requires special browser permission).
  *
- * Edge-case fixes vs v15:
- *  • Opaque (cross-origin) responses are never cached — they can
- *    lock users onto stale CDN resources with no way to bust.
- *  • Range-request responses (206) are never cached — they are
- *    partial and cannot be reconstructed later.
- *  • activate now also sweeps any old "journal-v*" entries so
- *    stale caches don't accumulate across versions.
- *  • postMessage 'SKIP_WAITING' lets the page trigger a takeover
- *    without a full reload cycle (used by the "Update available"
- *    toast in index.html).
- *  • Fonts are served cache-first (they never change for a given
- *    URL), CDN assets stale-while-revalidate so the LLM loader
- *    always gets a fresh module on the next visit without blocking
- *    the current one.
+ *  • The page-side reminders.js still handles the visibilitychange
+ *    path as a belt-and-suspenders fallback for desktop.
  * ============================================================ */
 
-const CACHE_VERSION = 'journal-v26';
+const CACHE_VERSION = 'journal-v27';
 
 const SHELL_ASSETS = [
     './',
@@ -70,7 +63,38 @@ const FONT_ORIGINS = [
     'https://fonts.gstatic.com',
 ];
 
-/* ── Install ─────────────────────────────────────────────── */
+/* ── Reminder state ──────────────────────────────────────────────────────── */
+// Stored in SW scope (not IndexedDB) for simplicity — survives across messages
+// within a SW lifecycle but resets if the SW is killed and restarted.
+// The page always re-sends SET_REMINDER on load so this is self-healing.
+let _reminderIntervalMins = 0;
+let _reminderTimer = null;
+
+function _scheduleNextReminder() {
+    clearTimeout(_reminderTimer);
+    if (_reminderIntervalMins <= 0) return;
+
+    _reminderTimer = setTimeout(async () => {
+        // Only notify if no client is currently visible (app is in background)
+        const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: false });
+        const anyVisible = clients.some(c => c.visibilityState === 'visible');
+
+        if (!anyVisible) {
+            await self.registration.showNotification('Interstitial Journal', {
+                body:     'Time to check in — what are you working on?',
+                icon:     '/InterstitialJournal/icon-192.png',
+                badge:    '/InterstitialJournal/icon-120.png',
+                tag:      'checkin',
+                renotify: true,
+            });
+        }
+
+        // Always reschedule so notifications keep firing
+        _scheduleNextReminder();
+    }, _reminderIntervalMins * 60 * 1000);
+}
+
+/* ── Install ─────────────────────────────────────────────────────────────── */
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_VERSION)
@@ -79,7 +103,7 @@ self.addEventListener('install', event => {
     );
 });
 
-/* ── Activate ────────────────────────────────────────────── */
+/* ── Activate ────────────────────────────────────────────────────────────── */
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(keys =>
@@ -92,14 +116,41 @@ self.addEventListener('activate', event => {
     );
 });
 
-/* ── Message channel ─────────────────────────────────────── */
+/* ── Message channel ─────────────────────────────────────────────────────── */
 self.addEventListener('message', event => {
-    if (event.data === 'SKIP_WAITING') {
+    const { data } = event;
+
+    if (data === 'SKIP_WAITING') {
         self.skipWaiting();
+        return;
+    }
+
+    // Page sends this when reminder interval changes (including 0 = off)
+    if (data?.type === 'SET_REMINDER') {
+        _reminderIntervalMins = Number(data.intervalMins) || 0;
+        clearTimeout(_reminderTimer);
+        _reminderTimer = null;
+        if (_reminderIntervalMins > 0) _scheduleNextReminder();
+        return;
     }
 });
 
-/* ── Fetch ───────────────────────────────────────────────── */
+/* ── Notification click — focus/open the app ─────────────────────────────── */
+self.addEventListener('notificationclick', event => {
+    event.notification.close();
+    event.waitUntil(
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+            for (const client of clients) {
+                if (client.url.includes('InterstitialJournal') && 'focus' in client) {
+                    return client.focus();
+                }
+            }
+            return self.clients.openWindow('/InterstitialJournal/');
+        })
+    );
+});
+
+/* ── Fetch ───────────────────────────────────────────────────────────────── */
 self.addEventListener('fetch', event => {
     const { request } = event;
     if (request.method !== 'GET') return;
@@ -107,7 +158,6 @@ self.addEventListener('fetch', event => {
     const url = new URL(request.url);
     if (!url.protocol.startsWith('http')) return;
 
-    // Never intercept auth / Drive API calls
     if (url.hostname.endsWith('googleapis.com') ||
         url.hostname.endsWith('accounts.google.com')) return;
 
