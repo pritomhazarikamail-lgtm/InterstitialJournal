@@ -323,10 +323,21 @@ export function mergeNotes(driveData) {
         }
     }
 
+    const _looksLikeIntention = (text) => {
+        if (typeof text !== 'string' || !text.trim()) return false;
+        const normalized = text.trim().toLowerCase();
+        const intentionText = (driveData?.todayIntention || localStorage.getItem('today_intention_text') || '').trim().toLowerCase();
+        if (intentionText && normalized === intentionText) return true;
+        if (/^🎯\s*today'?s intention:/i.test(text)) return true;
+        return false;
+    };
+
     if (typeof driveData?.nextUp === 'string' && driveData.nextUp && !localStorage.getItem('next_up')) {
-        localStorage.setItem('next_up', driveData.nextUp.slice(0, 200));
-        const noteInput = document.getElementById('note-input');
-        if (noteInput && !noteInput.value.trim()) noteInput.placeholder = driveData.nextUp;
+        if (!_looksLikeIntention(driveData.nextUp)) {
+            localStorage.setItem('next_up', driveData.nextUp.slice(0, 200));
+            const noteInput = document.getElementById('note-input');
+            if (noteInput && !noteInput.value.trim()) noteInput.placeholder = driveData.nextUp;
+        }
     }
 
     let _intentionChanged = false;

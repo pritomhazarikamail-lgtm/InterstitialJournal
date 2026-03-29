@@ -17,13 +17,21 @@ export function initDraft() {
     // Restore saved draft (only if the textarea is still empty)
     const saved = localStorage.getItem(DRAFT_KEY);
     if (saved && !noteInput.value) {
-        noteInput.value = saved;
-        if (charCounter) {
-            charCounter.textContent = `${saved.length} / 5000`;
-            charCounter.classList.toggle('warn', saved.length >= 4500);
+        const trimmed = saved.trim();
+        const looksLikeIntention = /^🎯\s*Today's intention:/i.test(trimmed)
+            || /^today's intention:/i.test(trimmed)
+            || trimmed.toLowerCase() === (localStorage.getItem('today_intention_text') || '').trim().toLowerCase();
+        if (looksLikeIntention) {
+            localStorage.removeItem(DRAFT_KEY);
+        } else {
+            noteInput.value = saved;
+            if (charCounter) {
+                charCounter.textContent = `${saved.length} / 5000`;
+                charCounter.classList.toggle('warn', saved.length >= 4500);
+            }
+            // Sync any slash-dropdown or draft-save listeners
+            noteInput.dispatchEvent(new Event('input'));
         }
-        // Sync any slash-dropdown or draft-save listeners
-        noteInput.dispatchEvent(new Event('input'));
     }
 
     // Persist every keystroke

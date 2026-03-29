@@ -43,7 +43,12 @@ export function initIntention() {
         _showAnchor(savedText);
         // Intention is pinned in the anchor strip — clear it from the textarea placeholder
         // (handles existing next_up values set before this was removed from _submit)
-        if (getNextUp() === savedText) {
+        const currentNextUp = getNextUp().trim();
+        const looksLikeIntention = currentNextUp && (
+            currentNextUp.toLowerCase() === savedText.trim().toLowerCase() ||
+            /^🎯\s*today'?s intention:/i.test(currentNextUp)
+        );
+        if (looksLikeIntention) {
             clearNextUp();
             const noteInput = document.getElementById('note-input');
             if (noteInput) noteInput.placeholder = 'What are you working on? Use #tags or type / for commands...';
