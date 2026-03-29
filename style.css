@@ -117,15 +117,14 @@ mark  { background: rgba(61,107,255,0.2); color: var(--accent); border-radius: 3
 .bottom-nav {
     position: fixed;
     bottom: 0;
-    left: 20px;
-    right: 20px;
-    max-width: 520px;
-    margin: 0 auto;
+    left: 0;
+    right: 0;
+    width: 100%;
     background: var(--card-bg);
     display: flex;
     justify-content: space-between;
     gap: 10px;
-    padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
     z-index: 1000;
     box-shadow: 0 -1px 0 var(--border), 0 -8px 24px rgba(0,0,0,0.04);
@@ -141,7 +140,7 @@ mark  { background: rgba(61,107,255,0.2); color: var(--accent); border-radius: 3
     font-weight: 600;
     font-family: 'DM Sans', sans-serif;
     display: flex;
-    flex: 0 1 calc((100% - 20px) / 3);
+    flex: 1;
     min-width: 0;
     overflow: hidden;
     flex-direction: column;
