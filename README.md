@@ -92,6 +92,14 @@ All AI runs entirely in your browser via [WebLLM](https://github.com/mlc-ai/web-
 - **AI Day Summary** — click Summarize on any day to get structured **Wins**, **Themes**, and a **Reflection**. This also loads the model into memory for the session.
 - **Note cleanup** — tap ✨ on any note card to fix grammar and clarity while preserving meaning.
 
+### 👤 Profile & Preferences
+- Update your display name and timezone for a more personal app experience
+- Choose an accent colour preset to customise the UI
+- Save custom Pomodoro durations for work, short break, and long break
+- Configure check-in reminder interval from the profile page
+- View your personal stats dashboard: total notes, words written, journal days, peak hour, current streak, and best streak
+- Manage Google Drive connection from a dedicated profile section
+
 ### ☁️ Google Drive Sync *(optional)*
 - Entirely optional — the app is fully functional without ever signing in
 - Syncs your journal to Google Drive `appDataFolder` — a private, app-sandboxed space no other app or person can access
@@ -141,7 +149,7 @@ index.html          ← HTML structure
 style.css           ← All styles
 app.js              ← Orchestrator (imports from modules/)
 manifest.json       ← PWA metadata
-sw.js               ← Service worker (offline caching, v25)
+sw.js               ← Service worker (offline caching, v27)
 modules/            ← Feature modules
 icon-512.webp / icon-512.png / icon-192.webp / icon-192.png
 icon-180.png / icon-152.png / icon-120.png
@@ -216,9 +224,10 @@ InterstitialJournal/
 │   ├── intention.js     # Once-per-day intention banner + persistent anchor + achieved tracking
 │   ├── haptic.js        # Haptic feedback wrapper (navigator.vibrate)
 │   ├── voice.js         # Voice-to-text via Web Speech API
+│   ├── profile.js       # Profile, preferences, stats dashboard, Drive connect/disconnect
 │   └── weekly.js        # Weekly digest modal (bar chart + stats)
 ├── manifest.json        # PWA manifest
-├── sw.js                # Service worker v25 (pre-caches all shell assets)
+├── sw.js                # Service worker v27 (pre-caches all shell assets)
 └── icon-*.webp / *.png  # App icons (512, 192, 180, 152, 120 px)
 ```
 
@@ -238,6 +247,7 @@ ai.js             ← storage                 (dynamic import of WebLLM; fires '
 calendar.js       ← storage, state          (fires custom DOM events instead of importing crud/search)
 weekly.js         ← storage, calendar
 drive.js          ← storage, toast, calendar, pomodoro
+profile.js        ← drive, reminders, storage, toast
 search.js         ← storage, state, calendar
 crud.js           ← storage, modal, toast, haptic, drive, calendar, write, timer
 pomodoro.js       ← toast, modal, crud, drive, timer
