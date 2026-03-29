@@ -50,12 +50,19 @@ export function applyAccent(name) {
 
 /* ── Header avatar ─────────────────────────────────────────────────────────── */
 
+function _profileInitials(name) {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return 'Profile';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
 export function renderNavAvatar() {
     const el    = document.getElementById('nav-avatar');
     const label = document.getElementById('nav-profile-label');
     const name  = localStorage.getItem('profile_name') || '';
     if (el)    el.textContent    = name.trim() ? name.trim()[0].toUpperCase() : '?';
-    if (label) label.textContent = name.trim() || 'Profile';
+    if (label) label.textContent = name.trim() ? _profileInitials(name) : 'Profile';
 }
 
 /* ── Init ──────────────────────────────────────────────────────────────────── */

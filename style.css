@@ -71,6 +71,19 @@ button, a, select, input, label, [role="button"] {
     touch-action: manipulation;
 }
 
+html,
+body {
+    overflow-x: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
 body {
     font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     background-color: var(--bg);
@@ -104,11 +117,14 @@ mark  { background: rgba(61,107,255,0.2); color: var(--accent); border-radius: 3
 .bottom-nav {
     position: fixed;
     bottom: 0;
-    left: 0;
-    width: 100%;
+    left: 20px;
+    right: 20px;
+    max-width: 520px;
+    margin: 0 auto;
     background: var(--card-bg);
     display: flex;
-    justify-content: space-around;
+    justify-content: space-between;
+    gap: 10px;
     padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
     z-index: 1000;
@@ -125,11 +141,15 @@ mark  { background: rgba(61,107,255,0.2); color: var(--accent); border-radius: 3
     font-weight: 600;
     font-family: 'DM Sans', sans-serif;
     display: flex;
+    flex: 0 1 calc((100% - 20px) / 3);
+    min-width: 0;
+    overflow: hidden;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 3px;
     cursor: pointer;
-    padding: 6px 16px;
+    padding: 6px 10px;
     border-radius: var(--radius-sm);
     transition: color 0.2s, background 0.2s;
     letter-spacing: 0.02em;
@@ -150,7 +170,18 @@ mark  { background: rgba(61,107,255,0.2); color: var(--accent); border-radius: 3
 .nav-item.active .nav-icon  { background: var(--accent-soft); transform: scale(1.1); }
 
 /* Profile nav item — avatar circle replaces the emoji icon */
-.nav-item--profile { gap: 2px; }
+.nav-item--profile {
+    gap: 2px;
+    min-width: 0;
+}
+
+#nav-profile-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+}
 
 .nav-avatar {
     width: 26px;
