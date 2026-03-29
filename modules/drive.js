@@ -24,6 +24,7 @@ const SYNC_INTERVAL_MS  = 5 * 60 * 1000;
 
 let tokenClient   = null;
 export let accessToken = null;
+let _userEmail    = null;
 let driveFileId   = localStorage.getItem(DRIVE_FILE_ID_KEY) || null;
 let syncInterval  = null;
 let isSyncing     = false;
@@ -32,6 +33,36 @@ let _visibilityListenerAdded = false;
 let _isDirty    = false;
 let _uploadTimer = null;
 let _refreshTimer = null;
+
+export function getUserEmail()    { return _userEmail; }
+export function isAuthenticated() { return !!accessToken; }
+
+export function disconnectDrive() {
+    if (accessToken && window.google?.accounts?.oauth2) {
+        google.accounts.oauth2.revoke(accessToken, () => {});
+    }
+    accessToken = null;
+    _userEmail  = null;
+    clearTimeout(_refreshTimer);
+    if (syncInterval) { clearInterval(syncInterval); syncInterval = null; }
+    localStorage.removeItem('auto_sync_enabled');
+    updateSyncUI('☁️', 'Sync');
+    document.dispatchEvent(new CustomEvent('drive-auth-changed', { detail: { authenticated: false, email: null } }));
+}
+
+async function _fetchUserEmail() {
+    try {
+        const res = await apiFetch('https://www.googleapis.com/oauth2/v3/userinfo');
+        if (res.ok) {
+            const data = await res.json();
+            _userEmail = (data.email && typeof data.email === 'string')
+                ? data.email.slice(0, 200) : null;
+            document.dispatchEvent(new CustomEvent('drive-auth-changed', {
+                detail: { authenticated: true, email: _userEmail },
+            }));
+        }
+    } catch (e) { /* silent — email is cosmetic */ }
+}
 
 /* ── Token management ─────────────────────────────────────────────────────── */
 
@@ -93,6 +124,7 @@ export function initGIS() {
             }
 
             accessToken = response.access_token;
+            _fetchUserEmail();
             const expiresInMs = (response.expires_in ?? 3600) * 1000;
             _scheduleTokenRefresh(expiresInMs);
 
@@ -141,8 +173,10 @@ export async function handleAuthClick() {
 }
 
 export function updateSyncUI(icon, text) {
-    document.getElementById('sync-icon').textContent = icon;
-    document.getElementById('sync-text').textContent = text;
+    const iconEl = document.getElementById('sync-icon');
+    const textEl = document.getElementById('sync-text');
+    if (iconEl) iconEl.textContent = icon;
+    if (textEl) textEl.textContent = text;
 }
 
 export function initOfflineIndicator() {

@@ -17,7 +17,7 @@
  *    path as a belt-and-suspenders fallback for desktop.
  * ============================================================ */
 
-const CACHE_VERSION = 'journal-v27';
+const CACHE_VERSION = 'journal-v28';
 
 const SHELL_ASSETS = [
     './',
@@ -44,6 +44,7 @@ const SHELL_ASSETS = [
     './modules/haptic.js',
     './modules/voice.js',
     './modules/weekly.js',
+    './modules/profile.js',
     './icon-192.webp',
     './icon-192.png',
     './icon-512.png',

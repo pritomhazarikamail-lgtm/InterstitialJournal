@@ -10,11 +10,13 @@ import { showToast } from './toast.js';
 import { showModal } from './modal.js';
 
 export function showPage(pageId) {
-    if (!['home-page', 'history-page'].includes(pageId)) return;
+    if (!['home-page', 'history-page', 'profile-page'].includes(pageId)) return;
     document.getElementById('home-page').classList.toggle('hidden', pageId !== 'home-page');
     document.getElementById('history-page').classList.toggle('hidden', pageId !== 'history-page');
+    document.getElementById('profile-page')?.classList.toggle('hidden', pageId !== 'profile-page');
     document.getElementById('nav-write').classList.toggle('active', pageId === 'home-page');
     document.getElementById('nav-history').classList.toggle('active', pageId === 'history-page');
+    document.getElementById('nav-profile')?.classList.toggle('active', pageId === 'profile-page');
 
     if (pageId === 'history-page') {
         uiState.activeTag = null;
@@ -27,6 +29,7 @@ export function showPage(pageId) {
         document.getElementById('calendar').style.display = 'grid';
     }
     if (pageId === 'home-page') renderRecentStrip();
+    if (pageId === 'profile-page') document.dispatchEvent(new CustomEvent('profile-page-opened'));
 }
 
 /* ── Export ─────────────────────────────────────────────────────────────────── */

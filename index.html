@@ -123,11 +123,17 @@
          ──────────────────────────────────────────────── -->
     <div id="home-page">
 
-        <!-- Header: live clock + dopamine streak -->
+        <!-- Header: avatar + live clock + dopamine streak -->
         <header class="home-header">
             <div class="home-header__left">
-                <span id="live-date"></span>
-                <div id="time-blindness-nudge"></div>
+                <button id="header-avatar-btn" class="header-avatar-btn" aria-label="Open profile">
+                    <span id="header-avatar" class="header-avatar">?</span>
+                    <span class="header-avatar-label" id="header-avatar-label">Profile</span>
+                </button>
+                <div class="home-header__datetime">
+                    <span id="live-date"></span>
+                    <div id="time-blindness-nudge"></div>
+                </div>
             </div>
             <div class="home-header__right" id="streak-container">
                 <div class="home-header__streak-label">Dopamine Streak</div>
@@ -364,6 +370,105 @@
 
 
     <!-- ────────────────────────────────────────────────
+         PROFILE PAGE
+         ──────────────────────────────────────────────── -->
+    <div id="profile-page" class="hidden">
+
+        <!-- Profile card -->
+        <div class="profile-card">
+            <div class="profile-avatar-large" id="profile-avatar-large">?</div>
+            <div class="profile-fields">
+                <div class="profile-field-group">
+                    <label class="profile-field-label" for="profile-name-input">Your name</label>
+                    <input type="text" id="profile-name-input" class="profile-text-input"
+                           maxlength="50" placeholder="What should we call you?"
+                           autocomplete="off" spellcheck="false">
+                </div>
+                <div class="profile-field-group">
+                    <label class="profile-field-label" for="profile-tz-select">Timezone</label>
+                    <select id="profile-tz-select" class="profile-select"></select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats dashboard -->
+        <section class="profile-section">
+            <h2 class="profile-section-title">Your Journey</h2>
+            <div class="stats-grid" id="stats-grid"></div>
+        </section>
+
+        <!-- Google Drive -->
+        <section class="profile-section">
+            <h2 class="profile-section-title">Google Drive</h2>
+            <div id="drive-profile-status"></div>
+        </section>
+
+        <!-- Preferences -->
+        <section class="profile-section">
+            <h2 class="profile-section-title">Preferences</h2>
+
+            <div class="pref-group">
+                <div class="pref-group-label">Appearance</div>
+                <div class="pref-row">
+                    <span class="pref-row-name">Theme</span>
+                    <button id="pref-dark-mode-btn" class="pref-toggle-btn">🌙 Dark</button>
+                </div>
+                <div class="pref-row">
+                    <span class="pref-row-name">Accent colour</span>
+                    <div class="accent-swatches" id="accent-swatches" role="group" aria-label="Accent colour"></div>
+                </div>
+            </div>
+
+            <div class="pref-group">
+                <div class="pref-group-label">Focus Timer</div>
+                <div class="pref-row">
+                    <span class="pref-row-name">Work</span>
+                    <div class="pref-stepper">
+                        <button id="pomo-work-dec" class="stepper-btn" aria-label="Decrease work duration">−</button>
+                        <span id="pomo-work-val" class="stepper-val">25</span>
+                        <span class="stepper-unit">min</span>
+                        <button id="pomo-work-inc" class="stepper-btn" aria-label="Increase work duration">+</button>
+                    </div>
+                </div>
+                <div class="pref-row">
+                    <span class="pref-row-name">Short break</span>
+                    <div class="pref-stepper">
+                        <button id="pomo-short-dec" class="stepper-btn" aria-label="Decrease short break">−</button>
+                        <span id="pomo-short-val" class="stepper-val">5</span>
+                        <span class="stepper-unit">min</span>
+                        <button id="pomo-short-inc" class="stepper-btn" aria-label="Increase short break">+</button>
+                    </div>
+                </div>
+                <div class="pref-row">
+                    <span class="pref-row-name">Long break</span>
+                    <div class="pref-stepper">
+                        <button id="pomo-long-dec" class="stepper-btn" aria-label="Decrease long break">−</button>
+                        <span id="pomo-long-val" class="stepper-val">15</span>
+                        <span class="stepper-unit">min</span>
+                        <button id="pomo-long-inc" class="stepper-btn" aria-label="Increase long break">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pref-group">
+                <div class="pref-group-label">Check-in Reminder</div>
+                <div class="pref-row">
+                    <span class="pref-row-name">Interval</span>
+                    <select id="pref-reminder-select" class="pref-select" aria-label="Check-in reminder interval">
+                        <option value="0">Off</option>
+                        <option value="15">Every 15 min</option>
+                        <option value="30">Every 30 min</option>
+                        <option value="60">Every hour</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <div style="height:48px;"></div>
+    </div><!-- /#profile-page -->
+
+
+    <!-- ────────────────────────────────────────────────
          BOTTOM NAVIGATION
          ──────────────────────────────────────────────── -->
     <nav class="bottom-nav" aria-label="Main navigation">
@@ -373,9 +478,8 @@
         <button class="nav-item" id="nav-history" aria-label="History">
             <span class="nav-icon" aria-hidden="true">📅</span> History
         </button>
-        <button class="nav-item" id="nav-sync" aria-label="Sync with Google Drive">
-            <span class="nav-icon" id="sync-icon" aria-hidden="true">☁️</span>
-            <span id="sync-text">Sync</span>
+        <button class="nav-item" id="nav-profile" aria-label="Profile">
+            <span class="nav-icon" aria-hidden="true">👤</span> Profile
         </button>
         <button class="nav-item" id="nav-theme" aria-label="Toggle appearance">
             <span class="nav-icon" id="theme-icon" aria-hidden="true">🌙</span> Theme

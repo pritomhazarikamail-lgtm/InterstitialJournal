@@ -23,7 +23,8 @@
  */
 
 import { saveNote, editNote, deleteNote, pinNote, toggleDarkMode, completeTodo, swipeDeleteNote, applyNoteEdit } from './modules/crud.js';
-import { initGIS, handleAuthClick, initOfflineIndicator } from './modules/drive.js';
+import { initGIS } from './modules/drive.js';
+import { initProfile, wireProfileEvents } from './modules/profile.js';
 import { initReminders } from './modules/reminders.js';
 import { initIntention }  from './modules/intention.js';
 import { renderFocus, startFocus, completeFocus, abandonFocus, pomoPauseResume, updateStreakUI } from './modules/pomodoro.js';
@@ -264,7 +265,8 @@ document.getElementById('pomo-pause-btn')?.addEventListener('click', pomoPauseRe
 document.getElementById('pomo-abandon-btn')?.addEventListener('click', abandonFocus);
 document.getElementById('nav-write')?.addEventListener('click', () => showPage('home-page'));
 document.getElementById('nav-history')?.addEventListener('click', () => showPage('history-page'));
-document.getElementById('nav-sync')?.addEventListener('click', handleAuthClick);
+document.getElementById('nav-profile')?.addEventListener('click', () => showPage('profile-page'));
+document.getElementById('header-avatar-btn')?.addEventListener('click', () => showPage('profile-page'));
 document.getElementById('nav-theme')?.addEventListener('click', toggleDarkMode);
 document.getElementById('prev-month-btn')?.addEventListener('click', () => changeMonth(-1));
 document.getElementById('next-month-btn')?.addEventListener('click', () => changeMonth(1));
@@ -454,7 +456,8 @@ document.getElementById('install-dismiss')?.addEventListener('click', () => {
     initModelSelect();
     initReminders();
     initIntention();
-    initOfflineIndicator();
+    initProfile();
+    wireProfileEvents();
     // Silently re-warm the AI model if the user has previously loaded it.
     // Uses requestIdleCallback internally — zero cost if model was never used.
     preloadModel();

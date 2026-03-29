@@ -15,10 +15,11 @@ import { saveNote }   from './crud.js';
 import { markDirty }  from './drive.js';
 import { updateLiveTimer } from './timer.js';
 
-const POMO_WORK_SECS  = 25 * 60;
-const POMO_SHORT_SECS =  5 * 60;
-const POMO_LONG_SECS  = 15 * 60;
-const POMO_CIRC       = 326.73;   // 2π × r=52
+const POMO_CIRC = 326.73;   // 2π × r=52
+
+export function getWorkSecs()  { return (parseInt(localStorage.getItem('pomo_work_mins')  || '25', 10) || 25) * 60; }
+export function getShortSecs() { return (parseInt(localStorage.getItem('pomo_short_mins') ||  '5', 10) ||  5) * 60; }
+export function getLongSecs()  { return (parseInt(localStorage.getItem('pomo_long_mins')  || '15', 10) || 15) * 60; }
 
 let _pomoTick        = null;
 let _pomoPhaseEnding = false;
@@ -104,9 +105,9 @@ function pomoClearState() {
 }
 
 function pomoDurationForPhase(phase, completedRounds) {
-    if (phase === 'work')  return POMO_WORK_SECS;
+    if (phase === 'work')  return getWorkSecs();
     if (phase === 'break') return (completedRounds > 0 && completedRounds % 4 === 0)
-                                    ? POMO_LONG_SECS : POMO_SHORT_SECS;
+                                    ? getLongSecs() : getShortSecs();
     return 0;
 }
 
@@ -199,7 +200,7 @@ async function pomoPhaseEnd(s) {
             showToast(`Round ${newRounds} done — ${newRounds % 4 === 0 ? 'Long break (15 min)! 🎉' : 'Short break (5 min)! 🎉'}`, 4000);
         } else {
             playBreakDone();
-            pomoSetState({ phase: 'work', endMs: Date.now() + POMO_WORK_SECS * 1000, paused: 0 });
+            pomoSetState({ phase: 'work', endMs: Date.now() + getWorkSecs() * 1000, paused: 0 });
             showToast("Break over — let's go! 🍅", 3000);
         }
         renderFocus();
@@ -222,7 +223,7 @@ export async function startFocus() {
     const text = noteInput.value.trim();
     if (!text) { showToast('Enter a focus goal first'); return; }
     pomoClearState();
-    pomoSetState({ goal: text.slice(0, 200), phase: 'work', endMs: Date.now() + POMO_WORK_SECS * 1000, rounds: 0, sessStart: Date.now(), paused: 0 });
+    pomoSetState({ goal: text.slice(0, 200), phase: 'work', endMs: Date.now() + getWorkSecs() * 1000, rounds: 0, sessStart: Date.now(), paused: 0 });
     noteInput.value = '';
     charCounter.textContent = '0 / 5000';
     charCounter.classList.remove('warn');
@@ -254,7 +255,10 @@ export async function completeFocus() {
     pomoStopTick();
     const totalMins = s.sessStart ? Math.round((Date.now() - s.sessStart) / 60000) : 0;
     await saveNote(`✅ Finished: ${s.goal} (#focus #pomodoro — ${s.rounds} 🍅, ${totalMins}m)`);
-    localStorage.setItem('focus_streak', String(parseInt(localStorage.getItem('focus_streak') || '0', 10) + 1));
+    const newStreak  = parseInt(localStorage.getItem('focus_streak') || '0', 10) + 1;
+    const bestStreak = parseInt(localStorage.getItem('best_focus_streak') || '0', 10);
+    localStorage.setItem('focus_streak', String(newStreak));
+    if (newStreak > bestStreak) localStorage.setItem('best_focus_streak', String(newStreak));
     markDirty(); // sync streak to Drive so other devices see it
     pomoClearState();
     renderFocus();
