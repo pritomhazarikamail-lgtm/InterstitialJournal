@@ -123,11 +123,8 @@
          ──────────────────────────────────────────────── -->
     <div id="home-page">
 
-        <!-- Header: single compact row -->
+        <!-- Header: date · time + streak dots -->
         <header class="home-header">
-            <button id="header-avatar-btn" class="header-avatar-btn" aria-label="Open profile">
-                <span id="header-avatar" class="header-avatar">?</span>
-            </button>
             <div class="home-header__center">
                 <span id="live-date"></span>
                 <div id="time-blindness-nudge"></div>
@@ -234,17 +231,6 @@
             <div id="recent-notes-list"></div>
         </div>
 
-        <!-- Check-in reminder settings -->
-        <div id="reminder-row">
-            <label for="reminder-select" id="reminder-label">🔔 Check-in</label>
-            <select id="reminder-select" aria-label="Check-in reminder interval">
-                <option value="0">Off</option>
-                <option value="15">Every 15 min</option>
-                <option value="30">Every 30 min</option>
-                <option value="60">Every hour</option>
-            </select>
-            <span id="reminder-hint">Off</span>
-        </div>
 
     </div><!-- /#home-page -->
 
@@ -474,11 +460,9 @@
         <button class="nav-item" id="nav-history" aria-label="History">
             <span class="nav-icon" aria-hidden="true">📅</span> History
         </button>
-        <button class="nav-item" id="nav-profile" aria-label="Profile">
-            <span class="nav-icon" aria-hidden="true">👤</span> Profile
-        </button>
-        <button class="nav-item" id="nav-theme" aria-label="Toggle appearance">
-            <span class="nav-icon" id="theme-icon" aria-hidden="true">🌙</span> Theme
+        <button class="nav-item nav-item--profile" id="nav-profile" aria-label="Profile">
+            <span class="nav-avatar" id="nav-avatar" aria-hidden="true">?</span>
+            <span id="nav-profile-label">Profile</span>
         </button>
     </nav>
 

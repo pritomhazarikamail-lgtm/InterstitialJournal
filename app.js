@@ -22,7 +22,7 @@
  * and the init() entry point.
  */
 
-import { saveNote, editNote, deleteNote, pinNote, toggleDarkMode, completeTodo, swipeDeleteNote, applyNoteEdit } from './modules/crud.js';
+import { saveNote, editNote, deleteNote, pinNote, completeTodo, swipeDeleteNote, applyNoteEdit } from './modules/crud.js';
 import { initGIS } from './modules/drive.js';
 import { initProfile, wireProfileEvents } from './modules/profile.js';
 import { initReminders } from './modules/reminders.js';
@@ -266,8 +266,6 @@ document.getElementById('pomo-abandon-btn')?.addEventListener('click', abandonFo
 document.getElementById('nav-write')?.addEventListener('click', () => showPage('home-page'));
 document.getElementById('nav-history')?.addEventListener('click', () => showPage('history-page'));
 document.getElementById('nav-profile')?.addEventListener('click', () => showPage('profile-page'));
-document.getElementById('header-avatar-btn')?.addEventListener('click', () => showPage('profile-page'));
-document.getElementById('nav-theme')?.addEventListener('click', toggleDarkMode);
 document.getElementById('prev-month-btn')?.addEventListener('click', () => changeMonth(-1));
 document.getElementById('next-month-btn')?.addEventListener('click', () => changeMonth(1));
 
@@ -471,7 +469,6 @@ document.getElementById('install-dismiss')?.addEventListener('click', () => {
     const saved  = localStorage.getItem('dark_mode');
     const isDark = saved === null ? true : saved !== 'false';
     document.body.classList.toggle('dark-mode', isDark);
-    document.getElementById('theme-icon').textContent = isDark ? '🌙' : '☀️';
     const tcMeta = document.getElementById('theme-color-meta');
     if (tcMeta) tcMeta.setAttribute('content', isDark ? '#111010' : '#f5f4f0');
 

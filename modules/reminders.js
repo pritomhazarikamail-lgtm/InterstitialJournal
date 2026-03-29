@@ -43,45 +43,39 @@ async function _syncToSW(intervalMins) {
 }
 
 export function initReminders() {
-    const sel = document.getElementById('reminder-select');
-    if (!sel) return;
-
+    // Restore active reminder on load — no DOM dependency
     const saved = parseInt(localStorage.getItem('checkin_interval') || '0', 10);
-    sel.value = String(saved);
-    _updateHint(saved);
-
-    // Restore active reminder if permission is already granted
     if (saved > 0 && 'Notification' in window && Notification.permission === 'granted') {
         _start(saved);
     }
+}
 
-    sel.addEventListener('change', async function () {
-        const mins = parseInt(this.value, 10);
-        localStorage.setItem('checkin_interval', String(mins));
-        _updateHint(mins);
+/**
+ * Called by the profile preferences select when the user changes the interval.
+ * Returns true if the reminder was set, false if permission was denied.
+ */
+export async function setReminderInterval(mins) {
+    if (mins === 0) {
+        localStorage.setItem('checkin_interval', '0');
+        _stop();
+        return true;
+    }
 
-        if (mins === 0) { _stop(); return; }
+    if (!('Notification' in window)) {
+        showToast('Notifications not supported on this browser');
+        return false;
+    }
 
-        if (!('Notification' in window)) {
-            showToast('Notifications not supported on this browser');
-            this.value = '0';
-            localStorage.setItem('checkin_interval', '0');
-            _updateHint(0);
-            return;
-        }
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') {
+        showToast('Allow notifications in browser settings to use reminders');
+        return false;
+    }
 
-        const perm = await Notification.requestPermission();
-        if (perm !== 'granted') {
-            showToast('Allow notifications in browser settings to use reminders');
-            this.value = '0';
-            localStorage.setItem('checkin_interval', '0');
-            _updateHint(0);
-            return;
-        }
-
-        _start(mins);
-        showToast(`Reminder set — nudge every ${mins}m 🔔`);
-    });
+    localStorage.setItem('checkin_interval', String(mins));
+    _start(mins);
+    showToast(`Reminder set — nudge every ${mins}m 🔔`);
+    return true;
 }
 
 /** Send a notification via the Service Worker (mobile-compatible fallback). */
@@ -140,10 +134,3 @@ function _stop() {
     _syncToSW(0);
 }
 
-function _updateHint(mins) {
-    const hint = document.getElementById('reminder-hint');
-    if (!hint) return;
-    hint.textContent = mins === 0
-        ? 'Off'
-        : `Nudge every ${mins}m when away`;
-}

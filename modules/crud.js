@@ -215,7 +215,6 @@ export function swipeDeleteNote(id) {
 export function toggleDarkMode() {
     const isDark = document.body.classList.toggle('dark-mode');
     localStorage.setItem('dark_mode', String(isDark));
-    document.getElementById('theme-icon').textContent = isDark ? '🌙' : '☀️';
     const meta = document.getElementById('theme-color-meta');
     if (meta) meta.setAttribute('content', isDark ? '#111010' : '#f5f4f0');
 }

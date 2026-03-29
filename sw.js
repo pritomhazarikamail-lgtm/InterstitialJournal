@@ -17,7 +17,7 @@
  *    path as a belt-and-suspenders fallback for desktop.
  * ============================================================ */
 
-const CACHE_VERSION = 'journal-v28';
+const CACHE_VERSION = 'journal-v30';
 
 const SHELL_ASSETS = [
     './',
@@ -97,6 +97,10 @@ function _scheduleNextReminder() {
 
 /* ── Install ─────────────────────────────────────────────────────────────── */
 self.addEventListener('install', event => {
+    // skipWaiting so the new SW activates immediately on all clients
+    // (Android PWA keeps a tab "open" indefinitely, so without this
+    //  the waiting SW never activates until the user manually closes the app)
+    self.skipWaiting();
     event.waitUntil(
         caches.open(CACHE_VERSION)
             .then(c => c.addAll(SHELL_ASSETS))

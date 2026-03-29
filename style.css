@@ -66,6 +66,11 @@ body.dark-mode {
  * ───────────────────────────────────────────────────────── */
 * { box-sizing: border-box; }
 
+/* Eliminate 300ms tap delay on Android/iOS for all interactive elements */
+button, a, select, input, label, [role="button"] {
+    touch-action: manipulation;
+}
+
 body {
     font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     background-color: var(--bg);
@@ -143,6 +148,34 @@ mark  { background: rgba(61,107,255,0.2); color: var(--accent); border-radius: 3
 
 .nav-item.active            { color: var(--accent); }
 .nav-item.active .nav-icon  { background: var(--accent-soft); transform: scale(1.1); }
+
+/* Profile nav item — avatar circle replaces the emoji icon */
+.nav-item--profile { gap: 2px; }
+
+.nav-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1.5px solid var(--border);
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-family: 'DM Sans', sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.15s;
+    line-height: 1;
+    margin: 0 auto 1px;
+}
+
+.nav-item--profile.active .nav-avatar {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent);
+    transform: scale(1.1);
+}
 
 /* Section typography */
 .section-header {
@@ -554,72 +587,41 @@ button.primary-btn:active { transform: scale(0.98) translateY(0); }
 .home-header {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     margin-bottom: 20px;
     padding-bottom: 14px;
     border-bottom: 1px solid var(--border);
 }
 
-/* Avatar button — left anchor */
-.header-avatar-btn {
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-}
-
-.header-avatar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background: var(--accent-soft);
-    color: var(--accent);
-    font-size: 0.78rem;
-    font-weight: 700;
-    border: 1.5px solid var(--accent);
-    transition: background 0.2s, transform 0.15s;
-    font-family: 'DM Sans', sans-serif;
-    line-height: 1;
-}
-
-.header-avatar-btn:hover .header-avatar  { background: var(--accent); color: #fff; }
-.header-avatar-btn:active .header-avatar { transform: scale(0.92); }
-
-/* Center — date · time, nudge below only when stale */
+/* Date · time — grows to fill available space */
 .home-header__center {
     flex: 1;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
 }
 
 #live-date {
-    font-size: 0.8rem;
+    display: block;
+    font-size: 0.85rem;
     font-weight: 500;
     color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1.4;
 }
 
 #time-blindness-nudge {
-    font-size: 0.68rem;
+    display: block;
+    font-size: 0.7rem;
     color: var(--muted);
     font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-height: 0;
+    line-height: 1.3;
 }
 
-/* Streak dots — right anchor, no label */
+/* Streak dots — right anchor */
 .home-header__streak {
     display: flex;
     flex-direction: column;
@@ -631,7 +633,7 @@ button.primary-btn:active { transform: scale(0.98) translateY(0); }
 .home-header__dots {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
 }
 
 .streak-dot {
@@ -1511,47 +1513,6 @@ button.primary-btn:active { transform: scale(0.98) translateY(0); }
 
 .intention-skip-btn:hover { color: var(--text); }
 
-/* ═══════════════════════════════════════════════════
-   24. CHECK-IN REMINDER ROW
-   ═══════════════════════════════════════════════════ */
-#reminder-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 16px;
-    padding: 9px 14px;
-    background: var(--surface2);
-    border-radius: var(--radius-sm);
-}
-
-#reminder-label {
-    font-size: 0.8rem;
-    color: var(--muted);
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-#reminder-select {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--card-bg);
-    color: var(--text);
-    font-family: 'DM Sans', sans-serif;
-    font-size: 0.8rem;
-    padding: 4px 7px;
-    cursor: pointer;
-    flex-shrink: 0;
-}
-
-#reminder-hint {
-    font-size: 0.75rem;
-    color: var(--muted);
-    flex: 1;
-    text-align: right;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
 
 /* ═══════════════════════════════════════════════════
    25. DAY DIGEST STATS BAR
@@ -1670,7 +1631,6 @@ body.focus-mode #intention-banner,
 body.focus-mode #focus-section,
 body.focus-mode #next-up-wrap,
 body.focus-mode #recent-strip,
-body.focus-mode #reminder-row,
 body.focus-mode #note-actions-row,
 body.focus-mode .bottom-nav {
     opacity: 0;
@@ -2384,8 +2344,8 @@ body.focus-mode #note-input {
 }
 
 .stepper-btn {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     border: 1.5px solid var(--border);
     background: var(--surface2);

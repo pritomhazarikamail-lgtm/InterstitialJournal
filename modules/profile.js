@@ -14,6 +14,7 @@ import { getLocalNotes }                                       from './storage.j
 import { getUserEmail, isAuthenticated, disconnectDrive,
          handleAuthClick, syncWithDrive }                      from './drive.js';
 import { showToast }                                           from './toast.js';
+import { setReminderInterval }                                 from './reminders.js';
 
 /* ── Accent colour presets ─────────────────────────────────────────────────── */
 
@@ -49,10 +50,12 @@ export function applyAccent(name) {
 
 /* ── Header avatar ─────────────────────────────────────────────────────────── */
 
-export function renderHeaderAvatar() {
-    const el   = document.getElementById('header-avatar');
-    const name = localStorage.getItem('profile_name') || '';
-    if (el) el.textContent = name.trim() ? name.trim()[0].toUpperCase() : '?';
+export function renderNavAvatar() {
+    const el    = document.getElementById('nav-avatar');
+    const label = document.getElementById('nav-profile-label');
+    const name  = localStorage.getItem('profile_name') || '';
+    if (el)    el.textContent    = name.trim() ? name.trim()[0].toUpperCase() : '?';
+    if (label) label.textContent = name.trim() || 'Profile';
 }
 
 /* ── Init ──────────────────────────────────────────────────────────────────── */
@@ -60,7 +63,7 @@ export function renderHeaderAvatar() {
 export function initProfile() {
     const saved = localStorage.getItem('profile_accent');
     if (saved) applyAccent(saved);
-    renderHeaderAvatar();
+    renderNavAvatar();
 
     document.addEventListener('profile-page-opened', renderProfilePage);
     document.addEventListener('drive-auth-changed', () => {
@@ -328,10 +331,9 @@ export function wireProfileEvents() {
         const name    = nameInput.value.slice(0, 50);
         localStorage.setItem('profile_name', name.trim());
         const initial = name.trim() ? name.trim()[0].toUpperCase() : '?';
-        const large  = document.getElementById('profile-avatar-large');
-        const header = document.getElementById('header-avatar');
-        if (large)  large.textContent  = initial;
-        if (header) header.textContent = initial;
+        const large = document.getElementById('profile-avatar-large');
+        if (large) large.textContent = initial;
+        renderNavAvatar();
     });
 
     // Timezone
@@ -367,22 +369,12 @@ export function wireProfileEvents() {
     _wirePomoStepper('pomo-short-val', 'pomo_short_mins', 1, 30);
     _wirePomoStepper('pomo-long-val',  'pomo_long_mins',  1, 60);
 
-    // Reminder — keep in sync with the home-page select
+    // Reminder
     const prefRem = document.getElementById('pref-reminder-select');
-    prefRem?.addEventListener('change', () => {
-        localStorage.setItem('checkin_interval', prefRem.value);
-        const homeRem = document.getElementById('reminder-select');
-        if (homeRem) {
-            homeRem.value = prefRem.value;
-            homeRem.dispatchEvent(new Event('change'));
-        }
-    });
-
-    // Home reminder → keep profile select in sync
-    const homeRem = document.getElementById('reminder-select');
-    homeRem?.addEventListener('change', () => {
-        const prefRem = document.getElementById('pref-reminder-select');
-        if (prefRem) prefRem.value = homeRem.value;
+    prefRem?.addEventListener('change', async () => {
+        const mins = parseInt(prefRem.value, 10);
+        const ok   = await setReminderInterval(mins);
+        if (!ok) prefRem.value = localStorage.getItem('checkin_interval') || '0';
     });
 }
 
